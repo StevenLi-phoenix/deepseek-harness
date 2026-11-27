@@ -527,9 +527,9 @@ describe('dsh-tool-subagent-control', () => {
     await reloaded.dispose()
   })
 
-  it('defaults interruption on and rejects non-boolean configuration', () => {
-    expect(tool.Config({})).toEqual({ interrupt: true })
-    expect(tool.Config({ interrupt: false })).toEqual({ interrupt: false })
+  it('defaults interruption and waiting on and rejects non-boolean configuration', () => {
+    expect(tool.Config({})).toEqual({ interrupt: true, wait: true })
+    expect(tool.Config({ interrupt: false, wait: false })).toEqual({ interrupt: false, wait: false })
     expect(() => tool.Config({ interrupt: 'false' } as never)).toThrow()
   })
 

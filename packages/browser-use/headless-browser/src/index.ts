@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { mkdir } from 'node:fs/promises'
 import { Config } from './config.ts'
@@ -16,10 +17,12 @@ import { CredentialVault } from './credentials.ts'
 import { firstLine } from './error.ts'
 import { registerFormTools } from './form-tools.ts'
 import { ActionGuard, type SecurityEvent } from './guard.ts'
+import { mountJobApplyBrowser } from './job-apply.ts'
 import { KeepaliveService, type KeepaliveEvent } from './keepalive.ts'
 import { LiveView } from './live-view.ts'
 import { PAGE_PATH, mountTakeoverRoutes } from './routes.ts'
 import { HeadlessBrowserSession } from './session.ts'
+import { TabStore } from './tab-store.ts'
 import { TakeoverState } from './takeover.ts'
 import { registerBrowserTools } from './tools.ts'
 import { UploadPolicy } from './uploads.ts'
@@ -27,6 +30,19 @@ import { UploadPolicy } from './uploads.ts'
 export { Config } from './config.ts'
 
 declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host-only shared profile operations for the restricted preset mount. */
+    headlessBrowserJobBridge: {
+      readonly browser: HeadlessBrowserSession
+      readonly takeover: TakeoverState
+      readonly credentials: CredentialVault
+    }
+    /** Trusted current-tab context for the verification-code tool in the job-apply scope. */
+    jobApplyBrowser: {
+      currentHost(sessionId: string, signal?: AbortSignal): Promise<string | null>
+      registrableDomain(host: string): string | null
+    }
+  }
   interface Events {
     /**
      * One action-guard decision, published so a host can watch what the browser is asked to do.
@@ -57,13 +73,25 @@ export const inject = ['tools']
  * @param config - validated launch, view, and snapshot settings.
  */
 export function apply(ctx: Context, config: Config): void {
+  const restriction = config.jobApply
+  if (restriction !== undefined) {
+    ctx.inject(['headlessBrowserJobBridge'], (scoped) => {
+      mountJobApplyBrowser(scoped, config, restriction, scoped.headlessBrowserJobBridge)
+    })
+    return
+  }
   // One guard for the whole plugin: the tools consult it, and the status route
   // reads the same event list, so a refusal cannot be logged twice or lost.
   const guard = new ActionGuard({
     onEvent: (event) => { ctx.emit('headless-browser/security', event) },
     sensitiveActions: config.sensitiveActions,
   })
-  const browser = new HeadlessBrowserSession(config, ctx.logger, guard)
+  const browser = new HeadlessBrowserSession(config, ctx.logger, guard, {
+    tabStore: new TabStore(dshPath('data', 'headless-browser', 'tabs.json'), ctx.logger),
+  })
+  void browser.reconcileTabsOnBoot().catch((error: unknown) => {
+    ctx.logger.warn('headless-browser: reconciling tabs on browser startup failed: %s', firstLine(error))
+  })
   const keepalives = new KeepaliveService({
     path: config.keepalivePath,
     create: async () => await browser.keepalivePage(),
@@ -74,6 +102,7 @@ export function apply(ctx: Context, config: Config): void {
   })
   const takeover = new TakeoverState()
   const credentials = new CredentialVault(config.credentialsPath)
+  ctx.provide('headlessBrowserJobBridge', { browser, takeover, credentials })
   const uploads = new UploadPolicy(config.uploadDirs, config.maxUploadMB)
   // The first upload directory is where the owner drops a task's files, so it exists from the first mount.
   const firstUploadDir = config.uploadDirs[0]

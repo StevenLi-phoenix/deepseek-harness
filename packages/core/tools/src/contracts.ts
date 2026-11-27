@@ -397,6 +397,8 @@ export interface ToolRestriction {
   readonly allow?: readonly string[]
   /** Global tool names removed from visibility. */
   readonly deny?: readonly string[]
+  /** Preserve registrations made in the restricting layer and inherited by its descendants. */
+  readonly preserveLocal?: boolean
 }
 
 /**

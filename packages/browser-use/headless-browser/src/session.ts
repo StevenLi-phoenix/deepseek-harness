@@ -11,11 +11,12 @@
  * @module @deepseek-ai/dsh-headless-browser/session
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Locator, type Page } from 'playwright-core'
+import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Locator, type Page, type Request, type Response } from 'playwright-core'
 import { probeChallenge, readChallengeFacts, type ChallengeFacts } from './challenge.ts'
 import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
@@ -29,8 +30,11 @@ import { MAX_READ_FRAMES, MIN_FRAME_AREA, readText, SelectorMissError, type Fram
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSelectOptions, type SelectOption } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
+import { deniedJobUrl, JobNavigationRefused, protectJobPage, safeHost } from './job-apply-network.ts'
+import { JobSnapshots } from './job-snapshots.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
-import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
+import type { TabStore } from './tab-store.ts'
+import { BrowserTabs, ResumeTabError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
 import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
@@ -108,6 +112,22 @@ export interface SessionDeps {
   readonly onExit?: (run: () => void) => () => void
   /** Kill one browser pid; a synchronous `SIGKILL` by default. */
   readonly kill?: (pid: number) => boolean
+  /** Plugin-owned metadata journal; direct callers can construct an ephemeral browser. */
+  readonly tabStore?: TabStore
+}
+
+const JOB_OWNER_PREFIX = 'job-apply:'
+
+interface JobCall {
+  readonly owner: string
+  readonly guard: ActionGuard
+}
+
+/** In-memory attachment validated and read from one file descriptor. */
+export interface UploadPayload {
+  readonly name: string
+  readonly mimeType: string
+  readonly buffer: Buffer
 }
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
@@ -215,13 +235,12 @@ export interface AxTargetResolver {
 }
 
 /** What a locator or an element handle both offer a guarded action. */
-interface Actionable {
-  click(): Promise<void>
-  focus(): Promise<void>
-  fill(value: string): Promise<void>
-  press(key: string): Promise<void>
-  selectOption(values: { index: number }, options?: { timeout?: number }): Promise<string[]>
-  evaluate<R>(probe: (node: HTMLElement | SVGElement) => R): Promise<R>
+type Actionable = (Locator | ElementHandle<Element>) & {
+  evaluate<R>(probe: (node: Element) => R): Promise<R>
+}
+
+function passwordInput(node: Element): boolean {
+  return node instanceof HTMLInputElement && node.type === 'password'
 }
 
 /** Which half of a saved account a secret fill writes. */
@@ -292,6 +311,9 @@ export class HeadlessBrowserSession {
   readonly #log: Pick<Context['logger'], 'debug' | 'info' | 'warn'>
   readonly #guard: ActionGuard
   readonly #deps: SessionDeps
+  readonly #job = new AsyncLocalStorage<JobCall>()
+  readonly #jobPages = new WeakSet<Page>()
+  readonly #jobSnapshots = new JobSnapshots()
   #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
   #launching: Promise<BrowserContext> | undefined
@@ -306,6 +328,8 @@ export class HeadlessBrowserSession {
   /** Pages a keepalive opened: never a tab, so never part of the tab cap. */
   readonly #background = new WeakSet<object>()
   readonly #cdps = new WeakMap<Page, CDPSession>()
+  readonly #httpErrors = new WeakMap<Page, string>()
+  readonly #navigationMethods = new WeakMap<Page, string>()
   readonly #relaunchListeners = new Set<() => void>()
   /** Keeps what the pages download; see `downloads.ts`. */
   readonly #downloads: DownloadStore
@@ -381,13 +405,12 @@ export class HeadlessBrowserSession {
    */
   async ensure(): Promise<BrowserContext> {
     if (this.#closed) throw new BrowserUnavailableError('the browser plugin is shutting down')
-    if (this.#context !== undefined) return this.#context
-    this.#launching ??= this.#launch()
+    const launch = this.#launching ??= this.#launch()
     try {
-      return await this.#launching
+      return await launch
     } catch (error: unknown) {
-      // A failed launch owns no context; the next caller may try again.
-      this.#launching = undefined
+      // Do not clear a newer launch if a second caller already retried this one.
+      if (this.#launching === launch) this.#launching = undefined
       throw error
     }
   }
@@ -403,9 +426,139 @@ export class HeadlessBrowserSession {
       // A keepalive's offscreen page is nobody's tab: adopting it would spend
       // one of the eight slots a person's tabs share.
       reserved: page => this.#background.has(page),
-      onAdopt: page => this.#downloads.attach(page),
+      onAdopt: (page, owner) => this.#observePage(page, owner?.startsWith(JOB_OWNER_PREFIX) !== true),
+      preparePopup: async (page, owner) => {
+        if (owner?.startsWith(JOB_OWNER_PREFIX) !== true) return undefined
+        try { await this.#protectJobPage(page) } catch (error: unknown) {
+          await page.close().catch((closed: unknown) => { void closed })
+          throw error
+        }
+        return owner
+      },
+      ...this.#deps.tabStore === undefined ? {} : { store: this.#deps.tabStore, nextId: () => `t-${randomUUID()}` },
     })
     return this.#tabs
+  }
+
+  /**
+   * Bind a scoped tool call to a trusted owner and tab policy without changing shared defaults.
+   * @param session - trusted Session identity supplied by the tool executor.
+   * @param guard - enforced action guard for this call.
+   * @param run - one restricted tool invocation.
+   * @returns the invocation result.
+   */
+  async runJob<T>(session: string, guard: ActionGuard, run: () => Promise<T>): Promise<T> {
+    return await this.#job.run({ owner: JOB_OWNER_PREFIX + session, guard }, run)
+  }
+
+  /**
+   * @param session - trusted identity of the calling Session.
+   * @param signal - cancellation of the verification request.
+   * @returns hostname of the current owned, admitted tab, or null.
+   */
+  async currentJobHost(session: string, signal?: AbortSignal): Promise<string | null> {
+    signal?.throwIfAborted()
+    const tab = this.tabsState().find(entry => entry.active)
+    const tabs = this.#tabs
+    if (tab === undefined || tabs === undefined || tabs.owner(tab.id) !== JOB_OWNER_PREFIX + session) return null
+    const page = await tabs.page(tab.id)
+    const url = page.url()
+    return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(url) ? null : safeHost(url)
+  }
+
+  async #protectJobPage(page: Page, onRefused?: (url: string) => void): Promise<void> {
+    await protectJobPage(page, (url, closing) => {
+      if (closing) onRefused?.(url)
+      this.#log.warn('headless-browser: %s', new JobNavigationRefused(url).message)
+    })
+    this.#jobPages.add(page)
+  }
+
+  #assertJobUrl(url: string): void {
+    if (this.#job.getStore() === undefined || !deniedJobUrl(url)) return
+    const error = new JobNavigationRefused(url)
+    this.#log.warn('headless-browser: %s', error.message)
+    throw error
+  }
+
+  #activeGuard(): ActionGuard {
+    return this.#job.getStore()?.guard ?? this.#guard
+  }
+
+  #assertJobOwner(tab: string | undefined): void {
+    const scoped = this.#job.getStore()
+    if (scoped !== undefined && (tab === undefined || this.tabs().owner(tab) !== scoped.owner)) {
+      throw new Error('the tab is not owned by this job-apply Session')
+    }
+  }
+
+  /** At plugin boot, reconcile a previous run's open tabs immediately; otherwise launch on demand. */
+  async reconcileTabsOnBoot(): Promise<void> {
+    const store = this.#deps.tabStore
+    if (store === undefined || !await store.hasOpenTabs() || this.#closed) return
+    await this.ensure()
+  }
+
+  /**
+   * Discover interactive tabs without changing focus or launching a browser.
+   * @returns the context's open tabs, or an empty list if none are open.
+   */
+  async listTabs(): Promise<ListedTab[]> {
+    const context = await this.#launching
+    if (context === undefined || this.#context !== context) return []
+    const tabs = await this.tabs().list(context)
+    await this.#deps.tabStore?.flush()
+    const scoped = this.#job.getStore()
+    return scoped === undefined ? tabs : tabs.filter(tab => this.tabs().owner(tab.id) === scoped.owner && !deniedJobUrl(tab.url))
+  }
+
+  /**
+   * Activate an existing form tab without replacing a healthy document.
+   * @param target - the live tab id or a substring of exactly one live URL.
+   * @returns the tab's current metadata and whether it contains form controls.
+   */
+  async resumeTab(target: ResumeTarget): Promise<ResumedTab> {
+    this.#assertJobOwner('tab' in target ? target.tab : undefined)
+    const context = await this.#launching
+    if (context === undefined || this.#context !== context) {
+      throw new ResumeTabError('no tab is open; reopen the page and refill the form')
+    }
+    try {
+      return await this.tabs().resume(context, target, (page) => {
+        this.#assertJobUrl(page.url())
+        return probeResume(page, this.#navigationMethods.get(page), this.#httpErrors.get(page))
+      })
+    } finally {
+      await this.#deps.tabStore?.flush()
+    }
+  }
+
+  #observePage(page: Page, downloads: boolean): () => void {
+    const detachDownloads = downloads ? this.#downloads.attach(page) : undefined
+    const isMainNavigation = (request: Request): boolean => {
+      if (!request.isNavigationRequest()) return false
+      try {
+        return request.frame() === page.mainFrame()
+      } catch {
+        // A popup's first request can precede its frame.
+        return false
+      }
+    }
+    const requested = (req: Request): void => {
+      if (isMainNavigation(req)) this.#navigationMethods.set(page, req.method())
+    }
+    const response = (res: Response): void => {
+      if (!isMainNavigation(res.request())) return
+      if (res.status() >= 400) this.#httpErrors.set(page, res.url())
+      else this.#httpErrors.delete(page)
+    }
+    page.on('request', requested)
+    page.on('response', response)
+    return () => {
+      page.off('request', requested)
+      page.off('response', response)
+      detachDownloads?.()
+    }
   }
 
   /**
@@ -432,7 +585,13 @@ export class HeadlessBrowserSession {
    * @returns the live page.
    */
   async page(id?: string): Promise<Page> {
-    return await this.tabs().page(id)
+    this.#assertJobOwner(id)
+    const page = await this.tabs().page(id)
+    if (this.#job.getStore() !== undefined) {
+      if (!this.#jobPages.has(page)) throw new Error('no protected job-apply tab is open')
+      this.#assertJobUrl(page.url())
+    }
+    return page
   }
 
   /**
@@ -482,9 +641,13 @@ export class HeadlessBrowserSession {
    * @param message - the validated tab message.
    */
   async applyTabCommand(message: TabMessage): Promise<void> {
-    await this.#guarded('applying a tab command', async () => {
-      await this.tabs().command(message.action, message.tabId, message.url)
-    })
+    try {
+      await this.#guarded('applying a tab command', async () => {
+        await this.tabs().command(message.action, message.tabId, message.url)
+      })
+    } finally {
+      await this.#deps.tabStore?.flush()
+    }
   }
 
   /**
@@ -493,34 +656,39 @@ export class HeadlessBrowserSession {
    * @param newTab - open a new tab instead of reusing one; a named tab is then ignored.
    * @param allowOrigin - allow the move when the destination is another registrable domain.
    * @param tabId - tab to load the URL in; the active tab when omitted.
+   * @param openedBySessionId - the DSH Session opening a new tab or using an unclaimed blank tab.
    * @returns the settled URL, the document title, and the tab it loaded in.
    * @throws ActionRefusedError - when the destination is another site and this call did not allow it.
    * @throws TabNotFoundError - when `tabId` names no open tab.
    */
-  async open(url: string, newTab = false, allowOrigin = false, tabId?: string): Promise<OpenResult> {
+  async open(url: string, newTab = false, allowOrigin = false, tabId?: string, openedBySessionId?: string): Promise<OpenResult> {
     const named = newTab ? undefined : tabId
     return await this.#guarded('opening the page', async () => {
-      const current = await this.page(named)
-      const decision = this.#guard.decideNavigation({ action: 'open', url: current.url(), target: url, allowOrigin })
+      this.#assertJobUrl(url)
+      const current = newTab && this.#job.getStore() !== undefined ? undefined : await this.page(named)
+      const decision = this.#activeGuard().decideNavigation({ action: 'open', url: current?.url() ?? 'about:blank', target: url, allowOrigin })
       if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
       const mark = this.#downloads.mark()
       let opened: { url: string; title: string; tab: string }
       try {
         opened = newTab
-          ? await this.#openTab(url)
-          : await this.#openHere(url, named)
+          ? await this.#openTab(url, openedBySessionId)
+          : await this.#openHere(url, named, openedBySessionId)
       } catch (error: unknown) {
         // A URL that answers with an attachment is a file, not a page: the
         // navigation fails and the download follows. Report the file.
-        if (!(error instanceof TabNavigationError) || !isDownloadStarting(error.message)) throw error
+        if (this.#job.getStore() !== undefined || !(error instanceof TabNavigationError) || !isDownloadStarting(error.message)) throw error
         const downloads = await this.#downloads.since(mark, DOWNLOAD_START_WAIT_MS)
         if (downloads.length === 0) throw error
         const page = await this.page(named)
         const tab = named ?? (await this.tabs().active()).id
         this.#log.info('headless-browser: %s was a download, %d file(s) kept', url.split('?')[0], downloads.length)
         return { url: page.url(), title: await page.title(), tab, downloads }
+      } finally {
+        await this.#deps.tabStore?.flush()
       }
-      this.#guard.anchor(opened.url)
+      this.#assertJobUrl(opened.url)
+      this.#activeGuard().anchor(opened.url)
       this.#log.info('headless-browser: opened %s in tab %s%s', pageOrigin(opened.url), opened.tab, newTab ? ' (new)' : '')
       return opened
     })
@@ -530,11 +698,12 @@ export class HeadlessBrowserSession {
    * Navigate the active or a named tab and report what settled.
    * @param url - absolute URL to load.
    * @param tabId - tab to navigate; the active tab when omitted.
+   * @param openedBySessionId - caller to credit for first use of an unclaimed blank page.
    * @returns the settled URL, the document title, and the tab's id.
    */
-  async #openHere(url: string, tabId?: string): Promise<{ url: string; title: string; tab: string }> {
+  async #openHere(url: string, tabId?: string, openedBySessionId?: string): Promise<{ url: string; title: string; tab: string }> {
     const tab = tabId ?? (await this.tabs().active()).id
-    await this.tabs().navigate(url, tab)
+    await this.tabs().navigate(url, tab, openedBySessionId)
     const page = await this.page(tab)
     return { url: page.url(), title: await page.title(), tab }
   }
@@ -542,10 +711,22 @@ export class HeadlessBrowserSession {
   /**
    * Open a URL in a new tab and report what settled.
    * @param url - absolute URL to load.
+   * @param openedBySessionId - the DSH Session that opened the tab, when one did.
    * @returns the new tab's URL, title and id.
    */
-  async #openTab(url: string): Promise<{ url: string; title: string; tab: string }> {
-    const tab = await this.tabs().create(url)
+  async #openTab(url: string, openedBySessionId?: string): Promise<{ url: string; title: string; tab: string }> {
+    const scoped = this.#job.getStore()
+    let refused: JobNavigationRefused | undefined
+    const prepare = scoped === undefined ? undefined : async (page: Page) => {
+      await this.#protectJobPage(page, (url) => { refused = new JobNavigationRefused(url) })
+    }
+    let tab: TabInfo
+    try {
+      tab = await this.tabs().create(url, scoped?.owner ?? openedBySessionId, prepare)
+    } catch (error: unknown) {
+      if (scoped !== undefined) throw refused ?? new Error('job-apply navigation failed')
+      throw error
+    }
     return { url: tab.url, title: tab.title, tab: tab.id }
   }
 
@@ -557,8 +738,15 @@ export class HeadlessBrowserSession {
    */
   async closeTab(tabId?: string): Promise<ClosedTab> {
     return await this.#guarded('closing a tab', async () => {
+      this.#assertJobOwner(tabId)
       if (this.tabsState().length === 0) throw new NoOpenTabError()
-      return await this.tabs().close(tabId)
+      try {
+        const scoped = this.#job.getStore()
+        const closed = await this.tabs().close(tabId)
+        return scoped === undefined ? closed : { ...closed, tabs: closed.tabs.filter(tab => this.tabs().owner(tab.id) === scoped.owner) }
+      } finally {
+        await this.#deps.tabStore?.flush()
+      }
     })
   }
 
@@ -571,6 +759,7 @@ export class HeadlessBrowserSession {
   async scroll(request: ScrollRequest, tabId?: string): Promise<ScrollResult> {
     return await this.#guarded('scrolling', async () => {
       const page = await this.page(tabId)
+      this.#assertJobUrl(page.url())
       const cdp = await this.cdp(tabId)
       const size = page.viewportSize() ?? { width: this.#config.viewportWidth, height: this.#config.viewportHeight }
       return await scrollPage(cdpScrollChannel(cdp), request, size)
@@ -586,11 +775,25 @@ export class HeadlessBrowserSession {
   async snapshot(tabId?: string, fullPage = false): Promise<{ path: string; url: string }> {
     return await this.#guarded('taking a snapshot', async () => {
       const page = await this.page(tabId)
+      this.#assertJobUrl(page.url())
+      const scoped = this.#job.getStore()
+      if (scoped !== undefined) {
+        const url = page.url()
+        const data = await page.screenshot({ fullPage, type: 'png' })
+        this.#assertJobUrl(page.url())
+        if (page.isClosed() || page.url() !== url) throw new Error('The tab moved during screenshot capture.')
+        return { path: this.#jobSnapshots.add(scoped.owner, data), url }
+      }
       await mkdir(this.#config.snapshotDir, { recursive: true })
       const path = join(this.#config.snapshotDir, `page-${new Date().toISOString().replaceAll(':', '-')}.png`)
       await page.screenshot({ path, fullPage })
       return { path, url: page.url() }
     })
+  }
+
+  /** @param session - trusted calling Session. @param id - returned snapshot identifier. @returns the owned screenshot bytes. */
+  jobSnapshot(session: string, id: string): Buffer | undefined {
+    return this.#jobSnapshots.get(JOB_OWNER_PREFIX + session, id)
   }
 
   /**
@@ -602,8 +805,10 @@ export class HeadlessBrowserSession {
    */
   async read(request: ReadRequest, tabId?: string): Promise<ReadResult> {
     return await this.#guarded('reading the page', async () => {
+      this.#assertJobOwner(tabId)
       const tab = tabId ?? (await this.tabs().active()).id
       const page = await this.page(tab)
+      this.#assertJobUrl(page.url())
       return await readText({ ...readable(page), missAdvice: async selector => await this.#missAdvice(page, selector) }, tab, request)
     })
   }
@@ -620,17 +825,19 @@ export class HeadlessBrowserSession {
   async click(request: TargetRequest, tabId?: string): Promise<ActionOutcome> {
     return await this.#guarded('clicking', async () => {
       const page = await this.page(tabId)
+      this.#assertJobUrl(page.url())
       if (request.point !== undefined) {
         const point = await this.#decideAtPoint(page, request.point, 'click', request.allowOrigin === true, tabId)
         const mark = this.#downloads.mark()
         const popupMark = this.tabs().popupMark()
         const at = request.point
         await this.#clickOn(page, async () => { await page.mouse.click(at.x, at.y) })
-        this.#guard.anchor(page.url())
+        this.#activeGuard().anchor(page.url())
+        this.#assertJobUrl(page.url())
         return { url: page.url(), point, ...await this.#openedSince(mark, popupMark) }
       }
       const resolution = await this.#resolve(page, request)
-      const target = this.#accept(this.#guard.decideTarget({
+      const target = this.#accept(this.#activeGuard().decideTarget({
         action: 'click',
         url: resolution.url,
         ref: resolution.ref,
@@ -638,10 +845,12 @@ export class HeadlessBrowserSession {
         allowOrigin: request.allowOrigin === true,
         ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
+      this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const mark = this.#downloads.mark()
       const popupMark = this.tabs().popupMark()
       await this.#clickOn(page, async () => { await resolution.element(target.index).click() })
-      this.#guard.anchor(page.url())
+      this.#activeGuard().anchor(page.url())
+      this.#assertJobUrl(page.url())
       return { url: page.url(), target, ...await this.#openedSince(mark, popupMark) }
     })
   }
@@ -671,6 +880,12 @@ export class HeadlessBrowserSession {
    * @returns `downloads` and `popups` fields, each only when there is one.
    */
   async #openedSince(mark: number, popupMark: number): Promise<Pick<ActionOutcome, 'downloads' | 'popups'>> {
+    const scoped = this.#job.getStore()
+    if (scoped !== undefined) {
+      const popups = (await this.tabs().popupsSince(popupMark, CLICK_DOWNLOAD_WAIT_MS))
+        .filter(popup => this.tabs().owner(popup.tab) === scoped.owner && !deniedJobUrl(popup.url))
+      return popups.length === 0 ? {} : { popups }
+    }
     const [downloads, popups] = await Promise.all([
       this.#downloadsSince(mark),
       this.tabs().popupsSince(popupMark, CLICK_DOWNLOAD_WAIT_MS),
@@ -703,19 +918,23 @@ export class HeadlessBrowserSession {
     const enter = options.enter === true
     return await this.#guarded('typing', async () => {
       const page = await this.page(tabId)
+      this.#assertJobUrl(page.url())
       if (request.point !== undefined) {
         const point = await this.#decideAtPoint(page, request.point, 'type', request.allowOrigin === true, tabId)
         await page.mouse.click(request.point.x, request.point.y)
+        await this.#guardJobFocus(page)
         await page.keyboard.insertText(text)
         if (enter) {
+          await this.#guardJobFocus(page)
           await page.keyboard.press('Enter')
           this.#log.info('headless-browser: pressed Enter after typing at (%d, %d)', request.point.x, request.point.y)
         }
-        this.#guard.anchor(page.url())
+        this.#activeGuard().anchor(page.url())
+        this.#assertJobUrl(page.url())
         return { url: page.url(), point }
       }
       const resolution = await this.#resolve(page, request)
-      const target = this.#accept(this.#guard.decideTarget({
+      const target = this.#accept(this.#activeGuard().decideTarget({
         action: 'type',
         url: resolution.url,
         ref: resolution.ref,
@@ -723,15 +942,18 @@ export class HeadlessBrowserSession {
         allowOrigin: request.allowOrigin === true,
         ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
+      this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const element = resolution.element(target.index)
       if (resolution.facts[target.index]?.tag === 'select') {
         const selected = await this.#choose(element, resolution.ref, text)
-        this.#guard.anchor(page.url())
+        this.#activeGuard().anchor(page.url())
+        this.#assertJobUrl(page.url())
         return { url: page.url(), target, selected }
       }
       if (await element.evaluate(isComboboxInput)) {
         const selected = await this.#typeIntoCombobox(page, resolution, element, text, request.allowOrigin === true, enter)
-        this.#guard.anchor(page.url())
+        this.#activeGuard().anchor(page.url())
+        this.#assertJobUrl(page.url())
         return { url: page.url(), target, ...selected === undefined ? {} : { selected } }
       }
       if (await element.evaluate(isSpinButton)) {
@@ -750,7 +972,8 @@ export class HeadlessBrowserSession {
         await element.press('Enter')
         this.#log.info('headless-browser: pressed Enter in %s after typing', resolution.ref)
       }
-      this.#guard.anchor(page.url())
+      this.#activeGuard().anchor(page.url())
+      this.#assertJobUrl(page.url())
       return { url: page.url(), target }
     })
   }
@@ -813,13 +1036,14 @@ export class HeadlessBrowserSession {
       facts = readElementFacts(await locator.evaluate(probeElement))
     }
     if (settled > 0) this.#log.info('headless-browser: %s option %d took %d ms to appear', ref, index + 1, settled)
-    this.#accept(this.#guard.decideTarget({
+    this.#accept(this.#activeGuard().decideTarget({
       action: 'click',
       url: resolution.url,
       ref: `${ref} option`,
       candidates: [facts],
       allowOrigin,
     }))
+    this.#authorizeTarget(resolution.url, facts)
     await locator.click()
     return option.label
   }
@@ -890,7 +1114,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('filling a saved credential', async () => {
       const page = await this.page(tabId)
       const resolution = await this.#resolve(page, request)
-      const target = this.#accept(this.#guard.decideTarget({
+      const target = this.#accept(this.#activeGuard().decideTarget({
         action: 'type',
         url: resolution.url,
         ref: resolution.ref,
@@ -899,13 +1123,27 @@ export class HeadlessBrowserSession {
         ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
       const element = resolution.element(target.index)
-      if (field === 'password' && !await element.evaluate(node => node instanceof HTMLInputElement && node.type === 'password')) {
+      if (field === 'password' && !await element.evaluate(passwordInput)) {
         throw new SecretFieldError(`${resolution.ref} is not a password input (input[type=password]); a saved password is only written into one`)
       }
       if (hostOf(resolution.url) !== host) {
         throw new SecretFieldError(`the field is on ${hostOf(resolution.url)}, not ${host}; a saved credential is only written on its own host`)
       }
-      await element.fill(secret)
+      if (this.#job.getStore() === undefined) await element.fill(secret)
+      else {
+        this.#authorizeTarget(resolution.url, resolution.facts[target.index])
+        const pinned: ElementHandle<Element> = 'elementHandle' in element ? await element.elementHandle() : element
+        try {
+          const frame = await pinned.ownerFrame()
+          if (frame === null || hostOf(frame.url()) !== host) throw new SecretFieldError('the credential target moved away from its saved host')
+          if (field === 'password' && !await pinned.evaluate(passwordInput)) {
+            throw new SecretFieldError('the credential target is no longer a password input')
+          }
+          await pinned.fill(secret)
+        } finally {
+          if (pinned !== element) await pinned.dispose()
+        }
+      }
       this.#log.info('headless-browser: wrote the saved %s for %s into %s', field, host, resolution.ref)
       return { url: page.url(), target }
     })
@@ -923,12 +1161,13 @@ export class HeadlessBrowserSession {
    * @returns the page URL and what received the files.
    * @throws Error - when the selector names no file input, or the trigger opened no chooser.
    */
-  async attachFiles(target: AttachTarget, paths: readonly string[], tabId?: string): Promise<AttachOutcome> {
+  async attachFiles(target: AttachTarget, paths: string[] | UploadPayload[], tabId?: string): Promise<AttachOutcome> {
     return await this.#guarded('attaching files', async () => {
       const page = await this.page(tabId)
+      this.#assertJobUrl(page.url())
       if (target.trigger !== undefined) {
         const resolution = await this.#resolve(page, target.trigger)
-        const choice = this.#accept(this.#guard.decideTarget({
+        const choice = this.#accept(this.#activeGuard().decideTarget({
           action: 'click',
           url: resolution.url,
           ref: resolution.ref,
@@ -936,12 +1175,18 @@ export class HeadlessBrowserSession {
           allowOrigin: false,
           ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
         }))
+        this.#authorizeTarget(resolution.url, resolution.facts[choice.index])
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser', { timeout: FILE_CHOOSER_WAIT_MS }),
           resolution.element(choice.index).click(),
         ])
         if (paths.length > 1 && !chooser.isMultiple()) throw new Error(`${resolution.ref} opens a chooser that takes one file; attach the files one call each`)
-        await chooser.setFiles([...paths])
+        if (this.#job.getStore() !== undefined) {
+          const input = chooser.element()
+          const frame = await input.ownerFrame()
+          this.#authorizeTarget(frame?.url() ?? '', readElementFacts(await input.evaluate(probeElement)))
+        }
+        await chooser.setFiles(paths)
         this.#log.info('headless-browser: attached %d file(s) through %s on %s', paths.length, resolution.ref, pageOrigin(page.url()))
         return { url: page.url(), ref: resolution.ref, target: choice }
       }
@@ -963,7 +1208,10 @@ export class HeadlessBrowserSession {
       if (paths.length > 1 && !await input.evaluate(node => node instanceof HTMLInputElement && node.multiple)) {
         throw new Error(`${selector} takes one file; attach the files one call each`)
       }
-      await input.setInputFiles([...paths])
+      if (this.#job.getStore() !== undefined) {
+        this.#authorizeTarget(located?.frame?.url() ?? page.url(), readElementFacts(await input.evaluate(probeElement)))
+      }
+      await input.setInputFiles(paths)
       this.#log.info('headless-browser: attached %d file(s) to %s on %s', paths.length, selector, pageOrigin(page.url()))
       return { url: page.url(), ref: selector, inputs: inputs.length }
     })
@@ -978,7 +1226,7 @@ export class HeadlessBrowserSession {
    */
   async #hitFacts(page: Page, point: { readonly x: number; readonly y: number }): Promise<ElementFacts | undefined> {
     const handle = await page.evaluateHandle(
-      (at: { x: number; y: number }) => {
+      (at: { x: number; y: number; job: boolean }) => {
         // Follow open shadow roots down, as the probe does, to the element a click there reaches.
         let hit = document.elementFromPoint(at.x, at.y)
         while (hit?.shadowRoot) {
@@ -986,9 +1234,20 @@ export class HeadlessBrowserSession {
           if (inner === null || inner === hit) break
           hit = inner
         }
+        if (at.job && hit !== null) {
+          const control = 'a,button,input,textarea,select,label,[role=button],[role=link],[role=checkbox],[contenteditable=true]'
+          let from: Element | null = hit
+          while (from !== null) {
+            const action: Element | null = from.closest(control)
+            if (action instanceof HTMLLabelElement && action.control !== null) return action.control
+            if (action !== null) return action
+            const root = from.getRootNode()
+            from = root instanceof ShadowRoot ? root.host : null
+          }
+        }
         return hit
       },
-      { x: point.x, y: point.y },
+      { x: point.x, y: point.y, job: this.#job.getStore() !== undefined },
     )
     try {
       const element = handle.asElement()
@@ -1047,14 +1306,18 @@ export class HeadlessBrowserSession {
           scope: page,
         }
       }
+      const frame = this.#job.getStore() === undefined ? null : await handle.ownerFrame()
+      const url = frame?.url() ?? page.url()
+      this.#assertJobUrl(url)
       const facts = readElementFacts(await handle.evaluate(probeElement))
-      return { ref: request.axId, facts: [facts], element: () => handle, url: page.url(), scope: page }
+      return { ref: request.axId, facts: [facts], element: () => handle, url, scope: frame ?? page }
     }
     const selector = request.selector
     if (selector === undefined) throw new Error('a guarded action needs a selector, an accessibility id, or a point')
     const located = await locate(page, selector)
     if (located === undefined) throw new SelectorMissError(selector, await this.#missAdvice(page, selector))
     const { locator, count, frame } = located
+    this.#assertJobUrl(frame?.url() ?? page.url())
     if (located.waited) this.#log.info('headless-browser: %s appeared on %s within the settle wait', selector, pageOrigin(page.url()))
     if (frame !== undefined) {
       this.#log.info('headless-browser: %s matches nothing on %s; acting in its embedded page %s', selector, pageOrigin(page.url()), pageOrigin(frame.url()))
@@ -1114,6 +1377,17 @@ export class HeadlessBrowserSession {
    * @param decision - the guard's answer.
    * @returns the chosen element.
    */
+  #authorizeTarget(url: string, facts?: ElementFacts): void {
+    if (this.#job.getStore() === undefined) return
+    this.#assertJobUrl(url)
+    if (facts?.href != null) this.#assertJobUrl(facts.href)
+    if (facts?.formAction != null) {
+      this.#assertJobUrl(facts.formAction)
+      const decision = this.#activeGuard().decideNavigation({ action: 'open', url, target: facts.formAction, allowOrigin: false })
+      if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
+    }
+  }
+
   #accept(decision: Decision): TargetChoice {
     if (!decision.allowed || decision.target === undefined) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
     return decision.target
@@ -1137,7 +1411,11 @@ export class HeadlessBrowserSession {
     tabId: string | undefined,
   ): Promise<PointChoice> {
     const hit = await this.#hitFacts(page, at)
-    return this.#acceptPoint(this.#guard.decidePoint({
+    if (this.#job.getStore() !== undefined) {
+      if (hit?.tag === 'iframe' || hit?.tag === 'frame') throw new Error('Use a selector for controls inside an embedded frame.')
+      this.#authorizeTarget(page.url(), hit)
+    }
+    return this.#acceptPoint(this.#activeGuard().decidePoint({
       action,
       url: page.url(),
       x: at.x,
@@ -1146,6 +1424,28 @@ export class HeadlessBrowserSession {
       ...hit === undefined ? {} : { hit },
       allowOrigin,
     }))
+  }
+
+  async #guardJobFocus(page: Page): Promise<void> {
+    if (this.#job.getStore() === undefined) return
+    const url = page.url()
+    this.#assertJobUrl(url)
+    const handle = await page.evaluateHandle(() => {
+      let element = document.activeElement
+      while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement
+      const editable = element instanceof HTMLElement && element.isContentEditable
+        || element instanceof HTMLTextAreaElement && !element.readOnly
+        || element instanceof HTMLInputElement && !element.readOnly
+          && /^(?:text|search|email|tel|url|password|number)$/u.test(element.type)
+      return editable ? element : null
+    })
+    try {
+      const field = handle.asElement()
+      if (field === null) throw new Error('The viewport point did not focus an editable field.')
+      const hit = readElementFacts(await field.evaluate(probeElement))
+      this.#authorizeTarget(url, hit)
+      this.#accept(this.#activeGuard().decideTarget({ action: 'type', url, ref: 'focused field', candidates: [hit], allowOrigin: false }))
+    } finally { await handle.dispose() }
   }
 
   /**
@@ -1184,8 +1484,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('opening a keepalive page', async () => {
       const context = await this.ensure()
       const active = this.#tabs?.state().find(tab => tab.active)?.id
-      const page = await context.newPage()
-      this.#background.add(page)
+      const page = await this.tabs().createReserved(context, (page) => { this.#background.add(page) })
       if (active !== undefined) {
         // Opening a page activates it in Chromium; put the agent's tab back in
         // front so a keepalive never moves the page a person is looking at.
@@ -1202,7 +1501,6 @@ export class HeadlessBrowserSession {
         challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
         text: async () => await page.evaluate(() => document.querySelector('body')?.innerText ?? ''),
         close: async () => {
-          this.#background.delete(page)
           await page.close()
         },
       }
@@ -1232,6 +1530,7 @@ export class HeadlessBrowserSession {
    * against the next start, which is why a restart could not open a tab.
    */
   async close(): Promise<void> {
+    this.#jobSnapshots.clear()
     this.#closed = true
     const launching = this.#launching
     if (launching !== undefined) {
@@ -1261,6 +1560,7 @@ export class HeadlessBrowserSession {
         if (pid !== undefined) this.#kill(pid)
       }
     }
+    await this.#deps.tabStore?.flush()
     await removeBrowserOwner(this.#config.profileDir).catch((error: unknown) => {
       this.#log.warn('headless-browser: forgetting the browser owner failed: %s', firstLine(error))
     })
@@ -1373,6 +1673,7 @@ export class HeadlessBrowserSession {
       })
     }
     context.on('close', () => {
+      if (this.#context !== context) return
       this.#stopStealth?.()
       this.#stopStealth = undefined
       this.#context = undefined
@@ -1384,6 +1685,11 @@ export class HeadlessBrowserSession {
     if (this.#config.stealth) {
       const stealth = stealthIdentity()
       this.#stopStealth = await applyStealth<Page>(context, this.#log, stealth)
+    }
+    if (this.#deps.tabStore !== undefined) {
+      const tabs = this.tabs()
+      context.on('page', (page) => { tabs.observePage(page) })
+      await tabs.reconcile(context)
     }
     return context
   }
@@ -1647,4 +1953,22 @@ async function locateNow(page: Page, selector: string): Promise<Located | undefi
  */
 function isSpinButton(element: Element): boolean {
   return element.getAttribute('role') === 'spinbutton'
+}
+
+/** A structural probe: selectors test for controls but never inspect or return their values. */
+async function probeResume(page: Page, method?: string, httpErrorUrl?: string): Promise<ResumeProbe> {
+  const chromiumError = page.url().startsWith('chrome-error:') || (await page.evaluate<string>('document.documentURI')).startsWith('chrome-error:')
+  // Chromium's error UI has its own buttons; those are not site form controls.
+  // A reload can re-submit a POST. Only retry navigation observed to be a GET.
+  if (chromiumError) return { hasForm: false, errorPage: method === 'GET' }
+  const counts = await Promise.all(page.frames().map(async (frame) => {
+    try {
+      return await frame.locator('input:not([type=hidden]), textarea, button, select').count()
+    } catch (error: unknown) {
+      if (frame.isDetached() && !page.isClosed()) return 0
+      throw error
+    }
+  }))
+  const hasForm = counts.some(count => count > 0)
+  return { hasForm, errorPage: !hasForm && method === 'GET' && httpErrorUrl === page.url().split('#', 1)[0] }
 }

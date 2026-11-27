@@ -54,6 +54,10 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-headless-browser)列出了全部可用字段。
 
+### 继续使用已打开的标签页
+
+如果填表时轮次中断，让下一位 agent 先列出已打开的标签页，再回到原标签页继续，不要重新打开它的 URL。取消轮次、轮次失败、subagent 退出，以及接管或交还浏览器控制权，都不会关闭标签页。选择目标的方法见「标签工具」一节。
+
 ### 读取页面文本
 
 截图只拍视口，比视口长的列表到了模型手上就少了下面几行，而且没有把画面滚动下去再拍一次的办法。`headless_browser_read` 交回页面渲染出来的文本而不是像素：整个文档 body，或者 CSS `selector` 命中的第一个元素，按字符切成窗口。`offset` 与 `limit` 逐页翻——默认 8000 个字符，最多 20000——结果里的 `header` 写明标签页、页面 URL、第几页和字符区间，另有 `total`，以及剩余文本的起始偏移 `nextOffset`。过长的一行 URL 在 `header` 里会截断，窗口按字符计数，不会切在代理对（例如 emoji）中间：每个窗口本身就是模型能独立读的文本。
@@ -202,7 +206,9 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 <details>
 <summary>实现细节——点击展开</summary>
 
-一个 `HeadlessBrowserSession` 拥有上下文。启动是惰性的单飞：工具调用和页面连接同时到达也只会起一个 Chromium；`close()` 会等一个输掉竞争的启动结束。浏览器在一个上下文上维护标签页：第一个页面作为 `t1` 接管，每个新标签拿到下一个 id，关闭的页面会被替换，因此上下文和它的 profile 始终存活。每次启动都有新的 session id，状态路由会报告它。
+一个 `HeadlessBrowserSession` 在插件的生命周期内拥有浏览器上下文。并发的启动请求共用一次 Chromium 启动。所有可交互标签页都属于这个上下文，不归某个 DSH Session 所有；保活使用各自的离屏页面。状态路由报告本次浏览器启动的 session id。
+
+`$DSH_HOME/data/headless-browser/tabs.json` 仅所有者可读写（权限 `0600`），保存标签页 id、URL、标题、首次和最近一次记录时间、打开它的 DSH Session id（启动前已存在或由用户打开时为 `null`），以及状态（`open`、`closed` 或 `lost`）。HTTP(S) URL 不保留凭据、查询字符串或片段。文件不存 `data:` URL 的内容、表单值、页面正文、cookie 或已保存的凭据。已关闭和丢失的记录只保留有限条。浏览器启动时，之前处于打开状态、但现在已不在上下文中的标签页会标记为 `lost`。
 
 实时画面是每个页面一个 CDP screencast，由所有已连接的查看者共享。第一个查看者到来时 `Page.startScreencast` 开始，最后一个离开时 `Page.stopScreencast` 停止；每一帧先确认再分发，因为 Chrome 只有收到确认才发下一帧。Chrome 在重绘时发帧，所以这个分发器保留最后一帧：页面静止时后连上来的查看者会立刻看到当前画面，而不是一块空白。帧里带着页面缩放指针输入所需的元数据，只在浏览器页面存在时才有帧。
 
@@ -217,7 +223,8 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 | [`src/index.ts`](src/index.ts) | 插件入口：会话、控制状态、实时画面、工具、路由 |
 | [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、截图、读取、点击、填值、滚动、关闭标签 |
 | [`src/read.ts`](src/read.ts) | 页面文本，切成带页码与区间的字符窗口 |
-| [`src/tabs.ts`](src/tabs.ts) | 标签 id、活动标签、加载状态、关闭、八标签上限和每次导航的期限 |
+| [`src/tabs.ts`](src/tabs.ts) | 已打开标签页的 id、活动标签页、加载和导航状态，以及标签页上限 |
+| [`src/tab-store.ts`](src/tab-store.ts) | 私有标签页元数据、保留规则与启动时的核对 |
 | [`src/stealth.ts`](src/stealth.ts) | 身份：启动设置、文档起始脚本，以及每页的 client hints 覆盖 |
 | [`src/takeover.ts`](src/takeover.ts) | 持有者状态，以及 agent 动作被拒绝时的错误 |
 | [`src/input.ts`](src/input.ts) | 线路消息解码、CDP 命令映射、帧编码 |
@@ -229,7 +236,7 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 | [`src/keepalive.ts`](src/keepalive.ts) | 保活存储、定时器、退避、通知、离屏页面池和它的 JSON 文件 |
 | [`src/challenge.ts`](src/challenge.ts) | 通用登录测试：页面侧探针，以及给被拦访问分类的规则 |
 | [`src/cookies.ts`](src/cookies.ts) | cookie 过滤、Cookie 头和日志安全的摘要 |
-| [`src/tools.ts`](src/tools.ts) | 十一个模型工具 |
+| [`src/tools.ts`](src/tools.ts) | 浏览、标签页、控制权、cookie 和保活的模型工具 |
 
 </details>
 
@@ -266,11 +273,11 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 
 #### 模型看到什么
 
-`headless_browser_close` 接收可选的 `tab`，返回 `{ "closed": "t2", "replaced": false, "tabs": [...] }`：剩下每个标签的 id、标题、URL、加载标志和活动标志。关闭最后一个标签时报告 `"replaced": true`，因为一个空白标签会接替它，浏览器、它的上下文和 profile 都保持打开。八个标签的上限保留；开第九个时回答 `{ "error": "opening <url> failed: the browser allows at most 8 tabs; close one with headless_browser_close before opening another" }`。关闭属于操作类工具，所以用户持有浏览器时会被拒绝。
+`headless_browser_tabs` 返回 `{ tabs: [{ id, url, title: { untrusted, content }, openedAt, lastNavigatedAt, active }] }`，列出共享浏览器上下文中所有仍打开的可交互标签页，不含离屏保活页面。列出标签页不会切换活动标签页，用户接管期间也可调用。 `headless_browser_resume` 必须且只能指定 `tab`（已打开的标签页 id）或 `urlSubstring`（仅匹配一个已打开标签页 URL 的子串）。没有匹配或有多个匹配时直接拒绝，不会打开新标签页或改用别的标签页。只有 agent 持有控制权时才可调用。工具将匹配的标签页设为活动标签页，只对空白页或 GET 导航失败后的错误页尝试重新加载，不会重新提交表单。现有动作守卫照常生效。结果为 `{ tab, url, title: { untrusted, content }, hasForm }`；`hasForm` 表示在主页面或内嵌框架里是否检测到表单控件，不读取控件的值。 `headless_browser_close` 接收可选的 `tab`，返回 `{ "closed": "t2", "replaced": false, "tabs": [...] }`：剩下每个标签的 id、标题、URL、加载标志和活动标志。关闭最后一个标签时报告 `"replaced": true`，因为一个空白标签会接替它，浏览器、它的上下文和 profile 都保持打开。八个标签的上限保留；开第九个时回答 `{ "error": "opening <url> failed: the browser allows at most 8 tabs; close one with headless_browser_close before opening another" }`。关闭属于操作类工具，所以用户持有浏览器时会被拒绝。
 
 #### Token 影响
 
-一个很小的定义；结果重复剩下的标签列表，最多八条短记录。
+三个简短的工具定义。列出或关闭标签页时，每个仍打开的标签页占一条记录；继续使用标签页时只返回所选的一页。
 
 #### KV Cache 影响
 
@@ -323,6 +330,7 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 <a id="known-limitations-and-deferred-work"></a>
 
 - **一个浏览器、一个挂载作用域** —— 路由是固定路径，所以一个 Host 只挂载一次；第二次挂载会在 `/headless-browser` 上冲突。浏览器是一个 Chromium、一套标签模型，不是每个 Session 一个，并行运行的 agent 共用它的标签页。
+- **只能继续使用仍打开的标签页** —— Chromium 进程或浏览器上下文丢失后，标签页元数据无法重建页面或未保存的表单状态。
 - **浏览器二进制由部署负责** —— `playwright-core` 不带浏览器，本包也不下载。没有 `PLAYWRIGHT_BROWSERS_PATH` 或账号缓存里的安装，每次工具调用都会带着启动器诊断失败。
 - **下载在完成后才检查** —— 大小上限针对完成的文件，所以很大的下载在完成或两分钟限制把它取消之前，仍占用浏览器的临时目录；保活项离屏页面的下载不保留。
 - **支持的是无头模式** —— `headless: false` 需要已登录的桌面会话；服务账号开不了窗口。

@@ -68,7 +68,7 @@ for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-qq', '@deepseek-ai/dsh-qq-login', '@deepseek-ai/dsh-tool-qq', '@deepseek-ai/dsh-qqbot',
   '@deepseek-ai/dsh-turn-taint', '@deepseek-ai/dsh-integrity-watch', '@deepseek-ai/dsh-speaking-style', '@deepseek-ai/dsh-speaking-style-settings', '@deepseek-ai/dsh-content-guard', '@deepseek-ai/dsh-time-gap',
   '@deepseek-ai/dsh-courses', '@deepseek-ai/dsh-courses-settings', '@deepseek-ai/dsh-tool-courses',
-  '@deepseek-ai/dsh-gmail', '@deepseek-ai/dsh-gmail-settings', '@deepseek-ai/dsh-tool-gmail', '@deepseek-ai/dsh-subagent-activity']) {
+  '@deepseek-ai/dsh-gmail', '@deepseek-ai/dsh-gmail-settings', '@deepseek-ai/dsh-tool-gmail', '@deepseek-ai/dsh-tool-job-apply', '@deepseek-ai/dsh-subagent-activity']) {
   link(name, join(prefix, 'node_modules', name))
 }
 // The fork bundles: one directory per layer under fork/bundles/, each declaring its own package name. The

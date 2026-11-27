@@ -128,6 +128,23 @@ function list(value: unknown): string[] {
 }
 
 /**
+ * The files and links an observation hands over, each with a title and where it is or what it says.
+ * @param value - the model's `materials` argument.
+ * @returns the materials without empty fields.
+ * @throws `ToolProblem` for an entry without a title, or with neither a url nor content.
+ */
+function materials(value: unknown): Record<string, string>[] {
+  if (!Array.isArray(value)) return []
+  return (value as Record<string, unknown>[]).map((fields) => {
+    const title = text(fields['title'])
+    const url = text(fields['url'])
+    const content = text(fields['content'])
+    if (title === '' || (url === '' && content === '')) throw new ToolProblem('each material needs a title and a url or content')
+    return { title, ...url === '' ? {} : { url }, ...content === '' ? {} : { content } }
+  })
+}
+
+/**
  * Define `courses_observe`, the write of what the agent itself read on a course platform page for one task: its dates,
  * certainty, submission status, or a task the records lack.
  * @param now - the clock; observed_at is its minute.
@@ -139,7 +156,7 @@ export function observeTool(now: () => Date = () => new Date()): WriteSpec {
   return {
     name: 'courses_observe',
     operation: 'save_task_observation',
-    description: 'Save what you yourself read on a course platform page (Brightspace, Gradescope) in this turn for one task: its due date, late date, deadline certainty, submission status, or a task the records lack. Only what the page showed: never what the owner told you (that is courses_set_progress), never a guess. To update a task, read it with courses_get and pass its id and version, and send only the fields that differ from the record; the others keep their saved values. Before adding a task, search with courses_find by a short title word, because record titles can differ from the platform\'s ("Homework 5" for "Homework Assignment 5"); only when it is really absent pass expected_version 0 with course, title, and due_at ("none" when the page shows no date). Unchanged tasks are not rewritten: list them in courses_record_sync checked_ids.',
+    description: 'Save what you yourself read on a course platform page (Brightspace, Gradescope) in this turn for one task: its due date, late date, deadline certainty, submission status, requirements, materials, date warning, or a task the records lack. Only what the page showed: never what the owner told you (that is courses_set_progress), never a guess. To update a task, read it with courses_get and pass its id and version, and send only the fields that differ from the record; the others keep their saved values. When a date changes, also compare the saved requirements and date_warning: send the page\'s current requirements, and replace the warning or clear it with "none", so no earlier text keeps contradicting the new date. Before adding a task, search with courses_find by a short title word, because record titles can differ from the platform\'s ("Homework 5" for "Homework Assignment 5"); only when it is really absent pass expected_version 0 with course, title, and due_at ("none" when the page shows no date). Unchanged tasks are not rewritten: list them in courses_record_sync checked_ids.',
     parameters: {
       id: { type: 'string', description: 'The task id from courses_get. Leave it out for a new task: one is derived.' },
       expected_version: { type: 'integer', required: true, description: 'The version courses_get showed; 0 for a new task.' },
@@ -151,6 +168,21 @@ export function observeTool(now: () => Date = () => new Date()): WriteSpec {
       late_at: { type: 'string', description: 'Last date late work is accepted, ISO 8601 with offset.' },
       deadline_certainty: { type: 'string', enum: [...CERTAINTY], description: 'confirmed when the page states the date; tentative when it says the date may change.' },
       submission_status: { type: 'string', enum: [...SUBMISSION], description: 'submitted when the page shows a submission (e.g. "1 Submission"); not_submitted when it shows none.' },
+      requirements: { type: 'string', description: 'The assignment\'s instructions and deliverables as the platform words them; replaces the saved text. Leave it out when unchanged or when the page shows none.' },
+      materials: {
+        type: 'array',
+        description: 'Files and links the assignment hands out, added to the ones already saved (none is removed).',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            title: { type: 'string', required: true, description: 'File name or link text.' },
+            url: { type: 'string', description: 'Where it is on the platform.' },
+            content: { type: 'string', description: 'The text itself, when it is text you read.' },
+          },
+        },
+      },
+      date_warning: { type: 'string', description: 'What is still uncertain or conflicting about the dates; replaces the saved warning. "none" removes a warning the page no longer supports.' },
     },
     title: args => `Save what the platform showed for ${text(args['id']) === '' ? `"${text(args['title'])}"` : text(args['id'])}`,
     build: (args) => {
@@ -162,11 +194,15 @@ export function observeTool(now: () => Date = () => new Date()): WriteSpec {
       const fresh = version === 0
       const course = text(args['course'])
       const title = text(args['title'])
+      const handed = materials(args['materials'])
       const facts: Record<string, unknown> = {
         ...text(args['due_at']).toLowerCase() === 'none' ? { due_at: null } : text(args['due_at']) === '' ? {} : { due_at: text(args['due_at']) },
         ...text(args['late_at']) === '' ? {} : { late_at: text(args['late_at']) },
         ...text(args['deadline_certainty']) === '' ? {} : { deadline_certainty: text(args['deadline_certainty']) },
         ...text(args['submission_status']) === '' ? {} : { submission: { status: text(args['submission_status']), platform: platformOf(url) } },
+        ...text(args['requirements']) === '' ? {} : { requirements: text(args['requirements']) },
+        ...handed.length === 0 ? {} : { materials: handed },
+        ...text(args['date_warning']).toLowerCase() === 'none' ? { date_warning: null } : text(args['date_warning']) === '' ? {} : { date_warning: text(args['date_warning']) },
       }
       if (fresh) {
         if (course === '' || title === '' || !('due_at' in facts)) throw new ToolProblem('a new task needs course, title, and due_at ("none" when the page shows no date)')

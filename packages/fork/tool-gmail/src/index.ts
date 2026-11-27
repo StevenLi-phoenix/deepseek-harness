@@ -9,6 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Gmail } from '@deepseek-ai/dsh-gmail'
 import z from '@deepseek-ai/schemastery'
 import { gmailTools, registerTool } from './tools.ts'
+import { registerVerificationTools } from './verification.ts'
 
 export { ToolProblem, type ToolDeps } from './tools.ts'
 
@@ -22,11 +23,14 @@ export const inject = ['tools']
 export interface Config {
   /** IANA zone dates are shown in. */
   timeZone: string
+  /** Owner tools, live-tab verification only, or mail triage reads only. */
+  mode?: 'full' | 'verification-only' | 'inbox-only'
 }
 
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
   timeZone: z.string().default('America/New_York').description('IANA zone dates are shown in.'),
+  mode: z.union([z.const('full'), z.const('verification-only'), z.const('inbox-only')]).default('full').description('Expose owner tools, live-tab verification, or inbox triage reads.'),
 })
 
 /**
@@ -43,6 +47,10 @@ export function apply(ctx: Context, config: Config): void {
   }
   ctx.inject(['gmail'], (scoped) => {
     const gmail: Gmail = scoped.gmail
-    for (const spec of gmailTools({ ctx: scoped, gmail, timeZone: config.timeZone })) registerTool(scoped, spec)
+    if (config.mode === 'verification-only') {
+      registerVerificationTools(scoped, gmail)
+      return
+    }
+    for (const spec of gmailTools({ ctx: scoped, gmail, timeZone: config.timeZone, inboxOnly: config.mode === 'inbox-only' })) registerTool(scoped, spec)
   })
 }

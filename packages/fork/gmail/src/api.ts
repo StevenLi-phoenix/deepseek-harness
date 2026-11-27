@@ -57,6 +57,7 @@ interface RequestSpec {
   readonly upload?: { readonly metadata: unknown; readonly message: string } | undefined
   /** Safe to repeat after a 5xx or a broken connection. */
   readonly repeatable: boolean
+  readonly signal?: AbortSignal | undefined
 }
 
 /** Longest Google error text carried into a message. */
@@ -83,6 +84,10 @@ const threadListSchema = z.object({
   threads: z.array(z.object({ id: z.string(), snippet: z.string().optional() })).optional(),
   nextPageToken: z.string().optional(),
   resultSizeEstimate: z.number().optional(),
+})
+const messageListSchema = z.object({
+  messages: z.array(z.object({ id: z.string() })).optional(),
+  nextPageToken: z.string().optional(),
 })
 const threadSchema = z.object({ id: z.string(), messages: z.array(gmailMessageSchema).optional() })
 const attachmentSchema = z.object({ size: z.number().optional(), data: z.string() })
@@ -178,17 +183,20 @@ export class GmailApi {
     let freshToken = false
     let retries = 0
     for (;;) {
+      spec.signal?.throwIfAborted()
       const token = await this.options.accessToken(freshToken)
       const timeout = AbortSignal.timeout(this.options.timeoutMs)
+      const signal = spec.signal === undefined ? timeout : AbortSignal.any([timeout, spec.signal])
       let response: Response
       try {
         response = await this.fetchImpl(url, {
           method: spec.method,
           headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...type === undefined ? {} : { 'content-type': type } },
           ...body === undefined ? {} : { body },
-          signal: timeout,
+          signal,
         })
       } catch (error: unknown) {
+        spec.signal?.throwIfAborted()
         const failure: GmailApiFailure = timeout.aborted ? 'timeout' : 'network'
         const delay = spec.repeatable ? this.delays[retries] : undefined
         if (delay !== undefined) {
@@ -285,6 +293,33 @@ export class GmailApi {
   async message(id: string, format: 'metadata' | 'full'): Promise<GmailMessage> {
     return GmailApi.parse(gmailMessageSchema, await this.request({
       method: 'GET', path: `/messages/${encodeURIComponent(id)}`, query: { format }, repeatable: true,
+    }), 'the message')
+  }
+
+  /**
+   * One page of message ids matching a Gmail search, without thread-level expansion.
+   * @param query - Gmail search syntax.
+   * @param maxResults - messages per page.
+   * @param signal - the caller's cancellation signal.
+   * @returns the ids and the next page token, if more matched.
+   */
+  async listMessages(query: string, maxResults: number, signal: AbortSignal): Promise<z.infer<typeof messageListSchema>> {
+    return GmailApi.parse(messageListSchema, await this.request({
+      method: 'GET', path: '/messages', query: { q: query, maxResults }, repeatable: true, signal,
+    }), 'the message list')
+  }
+
+  /**
+   * Read a verification candidate by id.
+   * @param id - a message id returned by `listMessages`.
+   * @param format - `metadata` for sender, subject and receipt time; `full` for the body.
+   * @param signal - the caller's cancellation signal.
+   * @returns the candidate message.
+   */
+  async verificationMessage(id: string, format: 'metadata' | 'full', signal: AbortSignal): Promise<GmailMessage> {
+    return GmailApi.parse(gmailMessageSchema, await this.request({
+      method: 'GET', path: `/messages/${encodeURIComponent(id)}`,
+      query: { format, metadataHeaders: format === 'metadata' ? ['From', 'Subject'] : undefined }, repeatable: true, signal,
     }), 'the message')
   }
 

@@ -6,8 +6,9 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
-import { BrowserTabs, MAX_TABS, TabLimitError, TabNavigationError, TabNotFoundError, type TabsContext, type TabsPage } from '../src/tabs.ts'
+import { Context } from '@deepseek-ai/cordis'
+import { TabStore } from '../src/tab-store.ts'
+import { BrowserTabs, MAX_TABS, ResumeTabError, TabLimitError, TabNavigationError, TabNotFoundError, type TabsContext, type TabsPage } from '../src/tabs.ts'
 
 const LOG = {
   info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
@@ -43,6 +44,11 @@ class FakePage implements TabsPage {
     return this.#title
   }
   isClosed(): boolean { return this.closed }
+  /** Change the URL before the browser's navigation event reaches the manager. */
+  moveSilently(url: string): void {
+    this.#url = url
+    this.#title = /<title>(.*?)<\/title>/iu.exec(decodeURIComponent(url))?.[1] ?? ''
+  }
   async goto(url: string): Promise<unknown> {
     await this.navigationGate
     if (this.failNextNavigation !== undefined) {
@@ -50,8 +56,7 @@ class FakePage implements TabsPage {
       this.failNextNavigation = undefined
       throw new Error(detail)
     }
-    this.#url = url
-    this.#title = /<title>(.*?)<\/title>/iu.exec(decodeURIComponent(url))?.[1] ?? ''
+    this.moveSilently(url)
     this.emit('framenavigated')
     this.emit('domcontentloaded')
     this.emit('load')
@@ -107,11 +112,13 @@ class FakeContext implements TabsContext {
   closed = false
   /** Set to make every page creation fail, the way a browser that went away answers. */
   failNewPage = false
-  pages(): readonly TabsPage[] { return this.open }
-  async newPage(): Promise<TabsPage> {
+  onPage?: (page: FakePage) => void
+  pages(): readonly FakePage[] { return this.open }
+  async newPage(): Promise<FakePage> {
     if (this.failNewPage) throw new Error('browserContext.newPage: Target page, context or browser has been closed')
     const page = new FakePage()
     this.open.push(page)
+    this.onPage?.(page)
     return page
   }
 }
@@ -154,6 +161,48 @@ describe('browser tabs', () => {
     expect((await tabs.active()).page).toBe(ordinary)
     expect(context.pages()).toContain(keepalive)
     expect(tabs.state()).toHaveLength(1)
+  })
+
+  it('adopts outside pages once, preserving focus and leaving reserved pages off the strip', async () => {
+    const context = new FakeContext()
+    const reserved = new WeakSet<FakePage>()
+    const tabs = new BrowserTabs({ context: async () => context, log: LOG, reserved: page => reserved.has(page) })
+    context.onPage = (page) => { tabs.observePage(page) }
+
+    const offscreen = await tabs.createReserved(context, (page) => { reserved.add(page) })
+    const first = await context.newPage()
+    await context.newPage()
+    tabs.observePage(first)
+    await tabs.popupsSince(0, 0)
+
+    expect(tabs.state().map(tab => [tab.id, tab.active])).toEqual([['t1', true], ['t2', false]])
+    expect((await tabs.active()).page).toBe(first)
+    expect(offscreen.isClosed()).toBe(false)
+  })
+
+  it('reports a failed outside-page adoption and still observes the next page', async () => {
+    const context = new FakeContext()
+    const nextId = vi.fn(() => 't1').mockImplementationOnce(() => { throw new Error('could not allocate tab ID') })
+    const tabs = new BrowserTabs({ context: async () => context, log: LOG, nextId })
+    context.onPage = (page) => { tabs.observePage(page) }
+
+    await context.newPage()
+    const second = await context.newPage()
+    await tabs.popupsSince(0, 0)
+
+    expect(LOG.warn).toHaveBeenCalledWith('headless-browser: observing a tab failed: %s', 'could not allocate tab ID')
+    expect(tabs.state().map(tab => tab.id)).toEqual(['t1'])
+    expect((await tabs.active()).page).toBe(second)
+  })
+
+  it('lists the live URL and title even if the navigation event has not reached the tab', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create()
+    const url = dataPage('new address')
+    context.open[0]!.moveSilently(url)
+
+    expect(await tabs.list(context)).toMatchObject([{ id: 't1', url, title: 'new address', active: true }])
+    expect(tabs.state()[0]?.url).toBe(url)
   })
 
   it('reports loading while a navigation runs and settles it afterwards', async () => {
@@ -335,7 +384,10 @@ describe('browser tabs', () => {
     await tabs.create()
     let changes = 0
     tabs.onChange(() => { changes += 1 })
-    context.open[0]!.navigationGate = navigation.promise
+    vi.spyOn(context.open[0]!, 'goto').mockImplementationOnce(async () => {
+      await navigation.promise
+      return {} // A committed navigation response arriving after disposal.
+    })
     const navigating = tabs.navigate(dataPage('late'))
     await vi.waitFor(() => { expect(tabs.state()[0]?.loading).toBe(true) })
     tabs.dispose()
@@ -399,6 +451,79 @@ describe('browser tabs', () => {
   })
 })
 
+describe('resuming tabs', () => {
+  it.each([['about:blank', 1], ['about:blank#section', 0]])('reloads only the exact blank document (%s)', async (url, reloads) => {
+    const { context, tabs } = await boot()
+    const { id } = await tabs.create(url)
+    const page = context.open[0]!
+    const reload = vi.spyOn(page, 'reload')
+    const probe = vi.fn().mockResolvedValue({ hasForm: false, errorPage: false })
+
+    await expect(tabs.resume(context, { tab: id }, probe)).resolves.toMatchObject({ tab: id, url, hasForm: false })
+    expect(reload).toHaveBeenCalledTimes(reloads)
+    expect(probe).toHaveBeenCalledTimes(1 + reloads)
+  })
+
+  it('does not reload a document the user navigated to during the error probe', async () => {
+    const { context, tabs } = await boot()
+    const { id } = await tabs.create(dataPage('error page'))
+    const page = context.open[0]!
+    const reload = vi.spyOn(page, 'reload')
+    const newUrl = dataPage('new page')
+    const probe = vi.fn(async () => {
+      await page.goto(newUrl)
+      return { hasForm: false, errorPage: true }
+    })
+
+    await expect(tabs.resume(context, { tab: id }, probe)).resolves.toMatchObject({ tab: id, url: newUrl, title: 'new page' })
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('tells the user to reopen the tab when it closes during the probe', async () => {
+    const { context, tabs } = await boot()
+    const { id } = await tabs.create(dataPage('form'))
+    const resuming = tabs.resume(context, { tab: id }, async (page) => {
+      await page.close()
+      throw new Error('probe lost the page')
+    })
+
+    await expect(resuming).rejects.toThrow(ResumeTabError)
+    await expect(resuming).rejects.toThrow('that tab closed during resume; reopen the page and refill the form')
+    await tabs.popupsSince(0, 0)
+    expect(tabs.state().map(tab => tab.id)).not.toContain(id)
+  })
+
+  it('reports a probe failure unchanged when the tab is still live', async () => {
+    const { context, tabs } = await boot()
+    const { id } = await tabs.create(dataPage('form'))
+    const failure = new Error('could not inspect the page')
+    const probe = vi.fn().mockRejectedValue(failure)
+
+    await expect(tabs.resume(context, { tab: id }, probe)).rejects.toBe(failure)
+    expect(tabs.state()[0]).toMatchObject({ id, active: true })
+  })
+
+  it('does not report a successful resume when the tab closes while its title is refreshed', async () => {
+    const { context, tabs } = await boot()
+    const { id } = await tabs.create(dataPage('form'))
+    const page = context.open[0]!
+    const readingTitle = Promise.withResolvers<undefined>()
+    const tabClosed = Promise.withResolvers<undefined>()
+    vi.spyOn(page, 'title').mockImplementationOnce(async () => {
+      readingTitle.resolve(undefined)
+      await tabClosed.promise
+      throw new Error('title read lost the page')
+    })
+    const probe = vi.fn().mockResolvedValue({ hasForm: true, errorPage: false })
+    const resuming = tabs.resume(context, { tab: id }, probe)
+
+    await readingTitle.promise
+    await page.close()
+    tabClosed.resolve(undefined)
+    await expect(resuming).rejects.toThrow(ResumeTabError)
+  })
+})
+
 describe('popups', () => {
   it('adopts a window a page opens as the active tab and returns to its opener when it closes itself', async () => {
     const { context, tabs } = await boot()
@@ -416,6 +541,20 @@ describe('popups', () => {
     await tabs.popupsSince(mark, 0)
     expect(tabs.state().map(tab => [tab.id, tab.active])).toEqual([['t1', true], ['t2', false]])
     expect(await tabs.popupsSince(mark, 0)).toEqual([])
+  })
+
+  it('does not attribute a browser-created popup to the Session that opened its parent tab', async () => {
+    const context = new FakeContext()
+    const store = new TabStore('unused-tabs.json', new Context().logger)
+    const see = vi.spyOn(store, 'see').mockImplementation(() => undefined)
+    const tabs = new BrowserTabs({ context: async () => context, log: LOG, store })
+    const opener = await tabs.create(dataPage('opener'), 'opening-session')
+    context.open[0]!.openPopup(new FakePage())
+
+    const [popup] = await tabs.popupsSince(0, 0)
+    expect(popup?.opener).toBe(opener.id)
+    expect(see).toHaveBeenCalledWith(expect.objectContaining({ id: opener.id, openedBySessionId: 'opening-session' }))
+    expect(see).toHaveBeenCalledWith(expect.objectContaining({ id: popup?.tab, openedBySessionId: null }))
   })
 
   it('waits briefly and reports nothing when no window opened, and adopts a popup past the tab cap', async () => {

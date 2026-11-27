@@ -14,7 +14,9 @@ import type { RelayChannel } from '@deepseek-ai/dsh-owner-relay'
 import type { DeferralHolder, Presence } from '@deepseek-ai/dsh-presence'
 // Type-only: ctx.permissionPresets, which `inject` names for the chat Session's permission preset.
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { turnOrigin, untrustedRequestId } from '@deepseek-ai/dsh-turn-taint/origin'
+import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { BackgroundWork, joinRelay } from '@deepseek-ai/dsh-service-kit'
@@ -400,6 +402,60 @@ export class WechatChannel extends Service implements OwnerNotifier {
    */
   tellMainAgent(message: MainAgentMessage): Promise<SessionId> {
     return this.notes.tellMainAgent(message)
+  }
+
+  /**
+   * Whether a main-agent turn was started or joined by an untrusted job-lead report.
+   * @param session - the Session running the turn.
+   * @returns whether this turn is for reporting only and must not execute tools.
+   */
+  isJobLeadReport(session: Session): boolean {
+    return turnOrigin(session).triggers.includes('peer:job')
+  }
+
+  /**
+   * Whether this is the current main chat and the job-lead route is configured.
+   * @param sessionId - the Session that would send job instructions.
+   * @returns whether the job tool can be offered in that Session.
+   */
+  canTellJobLead(sessionId: SessionId): boolean {
+    const target = this.ctx.get('ownerRelay')?.jobLeadSessionId
+    return target !== undefined && target !== sessionId && this.chat.isCurrentChat(sessionId)
+  }
+
+  /**
+   * Queue the owner's job instructions only to the configured root job-lead Session.
+   * @param caller - the Session running the tool, if any.
+   * @param raw - the owner's relayed instructions.
+   * @param signal - cancellation before prompt admission.
+   * @returns whether the prompt was queued or why none was queued.
+   */
+  async tellJobLead(caller: Session | undefined, raw: string, signal: AbortSignal): Promise<{ queued: true } | { notQueued: string }> {
+    const target = this.ctx.get('ownerRelay')?.jobLeadSessionId
+    if (target === undefined) return { notQueued: 'no job-lead Session is configured' }
+    if (caller === undefined || !this.canTellJobLead(caller.id) || !turnOrigin(caller).clean) {
+      return { notQueued: 'use this only for instructions from the owner in the current main chat' }
+    }
+    const text = raw.trim()
+    if (text === '') return { notQueued: 'text is empty' }
+    signal.throwIfAborted()
+    const resolved = await this.ctx.sessionController.resolveAgent(target)
+    if ('error' in resolved) return { notQueued: 'the configured job-lead Session is unavailable' }
+    const { header } = resolved.agent.session
+    if (header.agentPreset !== 'job-lead' || header.parentSession !== undefined) {
+      return { notQueued: 'the configured Session is not a root job-lead Session' }
+    }
+    if (this.ctx.get('ownerRelay')?.jobLeadSessionId !== target || !this.canTellJobLead(caller.id) || !turnOrigin(caller).clean) {
+      return { notQueued: 'the job-lead route or owner turn changed before queueing' }
+    }
+    await this.ctx.sessionController.prompt({
+      requestId: untrustedRequestId('main-agent') as SessionRequestId,
+      sessionId: target,
+      mode: 'queue',
+      content: [{ type: 'text', text }],
+      clientTimeZone: this.config.chat.timeZone,
+    }, signal)
+    return { queued: true }
   }
 
   /**

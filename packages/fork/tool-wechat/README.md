@@ -32,7 +32,9 @@ Add the row to the plugin list of the agent preset that should send files, in a 
   name: '@deepseek-ai/dsh-tool-wechat'
 ```
 
-The plugin has no configuration; the size limit is the channel's `maxMediaBytes` (25 MiB). `wechat_send` is registered only while the channel's `chat.delivery` is `hybrid` (its default); with `text` the agent has the other two tools only.
+With `deferOnly: true`, the preset gets only `defer_deliver`. Otherwise `wechat_send` is registered only with `chat.delivery: hybrid`, and `wechat_send_file` uses the channel's `maxMediaBytes` limit (25 MiB by default).
+
+When the [relay has a job-lead target](../owner-relay/README.md#use-this-package), only the current WeChat main Session is offered `tell_job_lead(text)`. It can queue job instructions on a clean owner turn only. A turn woken by a job-lead report cannot dispatch tools.
 
 -----
 

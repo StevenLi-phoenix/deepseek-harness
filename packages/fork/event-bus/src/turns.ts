@@ -83,6 +83,8 @@ export class TurnObserver {
    * @param event - the event.
    */
   observe(session: Session, event: SessionEvent): void {
+    // Job lead reports only through its relay, including when the route is unconfigured.
+    if (session.header.agentPreset === 'job-lead') return
     const { background, batches, logger, reporter } = this.deps
     switch (event.type) {
       case 'user/message': {

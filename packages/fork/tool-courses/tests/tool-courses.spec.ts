@@ -72,6 +72,21 @@ describe('course tools', () => {
     expect(String(body['request_id'])).toMatch(/^dsh-save_task_observation-/u)
   })
 
+  it('saves requirements and materials, and replaces or clears a date warning a new date made stale', async () => {
+    const { run, api } = await mount(() => ({ id: 'hw5', kind: 'task', version: 5 }))
+    const url = 'https://brightspace.nyu.edu/d2l/lms/dropbox/user/folders_list.d2l?ou=1'
+    const material = { title: 'hw5.pdf', url: 'https://brightspace.nyu.edu/d2l/api/le/1.67/1/dropbox/folders/2/attachments/3' }
+    await run('courses_observe', { id: 'hw5', expected_version: 4, url, observed: 'Due moved to Nov 29', requirements: ' The written part is due on Nov 29. ', materials: [material, { title: 'Note', content: 'No late work.' }], date_warning: 'none' })
+    expect(api.call.mock.calls[0]![1]).toMatchObject({ requirements: 'The written part is due on Nov 29.', materials: [material, { title: 'Note', content: 'No late work.' }], date_warning: null })
+    await run('courses_observe', { id: 'hw5', expected_version: 5, url, observed: 'Programming date not stated', date_warning: 'Programming date not stated on the page.' })
+    expect(api.call.mock.calls[1]![1]).toMatchObject({ date_warning: 'Programming date not stated on the page.' })
+    expect(api.call.mock.calls[1]![1]).not.toHaveProperty('requirements')
+    expect(api.call.mock.calls[1]![1]).not.toHaveProperty('materials')
+    expect(await run('courses_observe', { id: 'hw5', expected_version: 6, url, observed: 'x', materials: [{ title: 'no source' }] })).toMatchObject({ value: { error: 'each material needs a title and a url or content' } })
+    expect(await run('courses_observe', { id: 'hw5', expected_version: 6, url, observed: 'x', requirements: '  ', materials: [] })).toMatchObject({ value: { error: expect.stringContaining('nothing to save') as string } })
+    expect(api.call).toHaveBeenCalledTimes(2)
+  })
+
   it('adds a task the records lack only with course, title and a due date, and refuses an update with nothing to save', async () => {
     const { run, api } = await mount(() => ({ id: 'x', kind: 'task', version: 1 }))
     const url = 'https://brightspace.nyu.edu/d2l/lms/dropbox/user/folders_list.d2l?ou=639262'

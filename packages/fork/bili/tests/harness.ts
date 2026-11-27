@@ -196,7 +196,7 @@ export async function harness(options: HarnessOptions = {}) {
   const post = (body: unknown, contentType = 'application/json'): Promise<Response> => run(route().fetch(new Request('http://127.0.0.1/api/bili', {
     method: 'POST', headers: { 'content-type': contentType }, body: typeof body === 'string' ? body : JSON.stringify(body),
   })))
-  const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event) }
+  const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId, header: {} }, event) }
   return {
     ctx, account, svc, notes, logs, routes, sessions: sessions.state, credentials, presets, titles, pool, run, view, post, emit,
   }

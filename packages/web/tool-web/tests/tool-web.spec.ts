@@ -770,6 +770,40 @@ describe('tool-web execution through the real registry', () => {
     await fiber.dispose()
   })
 
+  it('uses the guarded provider entry point when configured public-only, without changing search', async () => {
+    const regular = vi.fn<WebFetchProvider['fetch']>()
+    const guarded = vi.fn<NonNullable<WebFetchProvider['fetchPublic']>>().mockResolvedValue({
+      url: 'https://example.com/', statusCode: 200, body: { kind: 'text', content: 'posting' }, truncated: false,
+    })
+    const search = vi.fn<WebSearchProvider['search']>().mockResolvedValue({
+      sources: [{ url: 'https://example.com/' }], truncated: false,
+    })
+    const { fiber, call } = await mountTools({
+      config: { publicOnly: true },
+      fetchProvider: { id: 'guarded', available: () => true, fetch: regular, fetchPublic: guarded },
+      search: { id: 'search', available: () => true, search },
+    })
+    try {
+      expect((await call('web_fetch', { url: 'https://example.com/' })).isError).toBe(false)
+      expect(guarded).toHaveBeenCalledExactlyOnceWith({ url: 'https://example.com/', publicOnly: true }, testToolSignal)
+      expect(regular).not.toHaveBeenCalled()
+      expect((await call('web_search', { queries: ['jobs'] })).isError).toBe(false)
+      expect(search).toHaveBeenCalledExactlyOnceWith({ query: 'jobs', maxResults: 10 }, testToolSignal)
+    } finally { await fiber.dispose() }
+  })
+
+  it('does not fall back to unrestricted fetching if the selected provider lacks a public-only entry point', async () => {
+    const fetch = vi.fn<WebFetchProvider['fetch']>()
+    const { fiber, call } = await mountTools({
+      config: { publicOnly: true }, fetchProvider: { id: 'unrestricted', available: () => true, fetch },
+    })
+    try {
+      const out = await call('web_fetch', { url: 'https://example.com/' })
+      expect(out.error?.info?.code).toBe('WEB_PUBLIC_FETCH_UNSUPPORTED')
+      expect(fetch).not.toHaveBeenCalled()
+    } finally { await fiber.dispose() }
+  })
+
   it('surfaces a structured WebError when no provider is available', async () => {
     const { fiber, call } = await mountTools()
     const out = await call('web_search', { queries: ['q'] })

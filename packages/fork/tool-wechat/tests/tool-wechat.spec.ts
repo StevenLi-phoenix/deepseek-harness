@@ -7,14 +7,14 @@ import * as ToolWechat from '../src/index.ts'
 
 const contexts: Context[] = []
 
-async function mount(notifier: unknown) {
+async function mount(notifier: unknown, config: Parameters<typeof ToolWechat.apply>[1] = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
   ctx.provide('ownerNotifier', notifier as never)
-  await ctx.plugin(ToolWechat)
+  await ctx.plugin(ToolWechat, config)
   const run = async (name: string, args: unknown) => (await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId('send-call'), name, arguments: JSON.stringify(args) }] })).results[0]!.result
   const call = (args: unknown) => run('wechat_send_file', args)
   const defer = (args: unknown) => run('defer_deliver', args)
@@ -115,6 +115,46 @@ describe('wechat_send_file', () => {
     const result = await call({})
     expect(result).not.toHaveProperty('value')
     expect(sendFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('tell_job_lead', () => {
+  it('admits the tool only for the current main chat when configured and never in defer-only presets', async () => {
+    const tellJobLead = vi.fn(async () => ({ queued: true }))
+    let configured = false
+    const notifier = { canTellJobLead: (id: string) => configured && id === 'chat', tellJobLead }
+    const { ctx } = await mount(notifier)
+    const deferOnly = await mount(notifier, { deferOnly: true })
+    expect(deferOnly.ctx.tools.schemas().map(schema => schema.name)).toEqual(['defer_deliver'])
+    const signal = AbortSignal.timeout(1000)
+    const modelSelection = { provider: 'mock', model: 'mock' }
+    const chat = { session: { id: 'chat' } } as never
+    const other = { session: { id: 'other' } } as never
+    const admitted = (agent: typeof chat) => ctx.tools.resolve({ agent, modelSelection, signal })
+    expect((await admitted(chat)).view(chat).has('tell_job_lead')).toBe(false)
+    configured = true
+    expect((await admitted(other)).view(other).has('tell_job_lead')).toBe(false)
+    const toolSet = await admitted(chat)
+    expect(toolSet.view(chat).has('tell_job_lead')).toBe(true)
+    const { results } = await ctx.tools.execute({
+      agent: chat, toolSet, signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('relay-call'), name: 'tell_job_lead', arguments: '{"text":"check the queue"}' }],
+    })
+    expect(results[0]?.result).toMatchObject({ value: { queued: true } })
+    expect(tellJobLead).toHaveBeenCalledWith({ id: 'chat' }, 'check the queue', expect.any(AbortSignal))
+    toolSet.dispose()
+  })
+
+  it('prevents dispatch of other main-agent tools during an untrusted job report', async () => {
+    const holdDelivery = vi.fn(async () => ({ held: 1, wakes: true }))
+    const { ctx } = await mount({ isJobLeadReport: () => true, holdDelivery })
+    const execution = await ctx.tools.execute({
+      agent: { session: { id: 'chat' } } as never,
+      signal: AbortSignal.timeout(1000),
+      calls: [{ type: 'tool-call', id: ToolCallId('hold-call'), name: 'defer_deliver', arguments: '{"text":"a bypass attempt"}' }],
+    })
+    expect(JSON.stringify(execution.results[0]?.result)).toContain('Summarize it without calling tools')
+    expect(holdDelivery).not.toHaveBeenCalled()
   })
 })
 

@@ -54,6 +54,10 @@ Mount the row once in a Host composition that has the Web server and the tool re
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-headless-browser) lists every accepted field.
 
+### Continuing in an open tab
+
+If a turn stops partway through a form, ask the next agent to list the open tabs and resume the existing tab instead of opening its URL again. Turn cancellation, turn failure, subagent exit, and taking or returning browser control do not close tabs. The Tab tools section explains how to select the right tab.
+
 ### Reading a page's text
 
 A screenshot captures the viewport, so a list longer than the viewport reaches the model with its lower rows missing and no way to scroll them into a picture. `headless_browser_read` answers with the page's rendered text instead of pixels: the document body, or the first element that matches a CSS `selector`, cut into character windows. `offset` and `limit` page through it — 8000 characters by default, 20000 at most — and the result carries a `header` naming the tab, the page URL, the page, and the character range, plus `total` and the `nextOffset` of the text that remains. A URL too long for one line is shortened in the header, and a window is counted in characters, so it never ends inside a surrogate pair such as an emoji: every window is text the model can read on its own.
@@ -202,7 +206,9 @@ A page can say anything: that a checkbox "verifies it is human", that a form is 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-One `HeadlessBrowserSession` owns the context. The launch is lazy and single-flight, so a tool call and a page view racing each other still start one Chromium; `close()` settles a launch that lost the race. The browser keeps tabs over that one context: the first page is adopted as `t1`, each new tab gets the next id, and a page that closes is replaced so the context and its profile stay open. A launch gets a fresh session id, which the status route reports.
+One `HeadlessBrowserSession` owns the context for the lifetime of the plugin. Concurrent launch requests share one Chromium launch. All interactive tabs belong to that context, not to a DSH Session; keepalives use separate offscreen pages. The status route reports the browser launch's session id.
+
+The owner-only `$DSH_HOME/data/headless-browser/tabs.json` (mode `0600`) stores each tab's id, URL, title, first- and last-seen times, opening DSH Session id (`null` for preexisting or user-opened tabs), and status (`open`, `closed`, or `lost`). For HTTP(S) URLs it omits credentials, queries, and fragments. It never stores `data:` payloads, form values, page bodies, cookies, or saved credentials. Closed and lost history is bounded. At browser startup, previously open tabs that are no longer live are marked `lost`.
 
 The live view is one CDP screencast per page shared by every connected viewer. `Page.startScreencast` starts for the first viewer and `Page.stopScreencast` stops for the last; every frame is acknowledged before it is fanned out, because Chrome sends the next one only after the ack. Chrome sends frames on repaint, so the hub keeps the last frame: a page that connects to a still page sees the current screen at once instead of a blank area. Frames carry the metadata the page scales pointer input by, and arrive only while the browser page exists.
 
@@ -217,7 +223,8 @@ The tools share two guards. An acting tool calls `TakeoverState.assertAgent` fir
 | [`src/index.ts`](src/index.ts) | Plugin entry: session, control state, live view, tools, routes |
 | [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, read, click, fill, scroll, tab close |
 | [`src/read.ts`](src/read.ts) | Page text, cut into character windows with a header naming the page and range |
-| [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, closing, the eight-tab cap, and the per-navigation deadline |
+| [`src/tabs.ts`](src/tabs.ts) | Live tab ids, active tab, loading and navigation state, and the tab cap |
+| [`src/tab-store.ts`](src/tab-store.ts) | Private tab metadata, retention, and startup reconciliation |
 | [`src/stealth.ts`](src/stealth.ts) | The identity: launch settings, the document-start script, and the per-page client-hint override |
 | [`src/takeover.ts`](src/takeover.ts) | Holder state and the refusal an agent action gets |
 | [`src/input.ts`](src/input.ts) | Wire decoding, CDP command mapping, frame encoding |
@@ -229,7 +236,7 @@ The tools share two guards. An acting tool calls `TakeoverState.assertAgent` fir
 | [`src/keepalive.ts`](src/keepalive.ts) | The keepalive store, timers, backoff, notices, offscreen page pool, and its JSON file |
 | [`src/challenge.ts`](src/challenge.ts) | The generic sign-in test: the page-side probe and the rule that classifies a blocked visit |
 | [`src/cookies.ts`](src/cookies.ts) | Cookie filtering, the Cookie header, and the log-safe summary |
-| [`src/tools.ts`](src/tools.ts) | The eleven model tools |
+| [`src/tools.ts`](src/tools.ts) | Model tools for browsing, tabs, control, cookies, and keepalives |
 
 </details>
 
@@ -266,11 +273,11 @@ Prefix-stable while the tool definitions and the descriptions are unchanged; res
 
 #### What the model sees
 
-`headless_browser_close` takes an optional `tab` and returns `{ "closed": "t2", "replaced": false, "tabs": [...] }`: every remaining tab's id, title, URL, loading flag, and active flag. Closing the last tab reports `"replaced": true`, because a blank tab takes its place and the browser, its context, and its profile stay open. The eight-tab cap remains; opening a ninth answers `{ "error": "opening <url> failed: the browser allows at most 8 tabs; close one with headless_browser_close before opening another" }`. Closing is an acting tool, so it is refused while the user holds the browser.
+`headless_browser_tabs` returns `{ tabs: [{ id, url, title: { untrusted, content }, openedAt, lastNavigatedAt, active }] }` for every live interactive tab in the shared browser context. It excludes offscreen keepalive pages. Listing does not activate a tab and remains available during user takeover. `headless_browser_resume` requires exactly one of `tab` (an existing tab id) or `urlSubstring` (a substring that matches one live tab's URL). It refuses a missing or ambiguous match instead of opening a new tab or using another one. It requires agent control and activates the matched tab. It only attempts to reload a blank page or an error after a GET navigation, never a form submission. The existing action guard still applies. The result is `{ tab, url, title: { untrusted, content }, hasForm }`; `hasForm` reports whether form controls were detected in the main page or an embedded frame, without reading their values. `headless_browser_close` takes an optional `tab` and returns `{ "closed": "t2", "replaced": false, "tabs": [...] }`: every remaining tab's id, title, URL, loading flag, and active flag. Closing the last tab reports `"replaced": true`, because a blank tab takes its place and the browser, its context, and its profile stay open. The eight-tab cap remains; opening a ninth answers `{ "error": "opening <url> failed: the browser allows at most 8 tabs; close one with headless_browser_close before opening another" }`. Closing is an acting tool, so it is refused while the user holds the browser.
 
 #### Token effect
 
-One small definition; a result repeats the remaining tab list, at most eight short entries.
+Three small definitions. Listing and closing return one short entry per live tab; resuming returns one tab.
 
 #### KV Cache effect
 
@@ -323,6 +330,7 @@ Prefix-stable while the definitions are unchanged; results append after the reus
 <a id="known-limitations-and-deferred-work"></a>
 
 - **One browser, one mounting scope** — the routes are fixed paths, so a Host mounts the package once; a second mount collides on `/headless-browser`. The browser is one Chromium with one tab model, not one per Session, so parallel agents share its tabs.
+- **Resume requires a live tab** — after the Chromium process or browser context is lost, tab metadata cannot reconstruct the page or its unsaved form state.
 - **The browser binary is the deployment's** — `playwright-core` ships no browser, and this package does not download one. Without `PLAYWRIGHT_BROWSERS_PATH` or an install into the account's cache, every tool call fails with the launcher diagnostic.
 - **A download is checked after it finishes** — the size cap applies to the finished file, so a very large download still occupies the browser's temporary directory until it completes or the two-minute limit cancels it; downloads of a keepalive's offscreen page are not kept.
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
