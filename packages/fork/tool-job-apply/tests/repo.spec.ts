@@ -9,6 +9,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import * as JobTools from '../src/index.ts'
 import { present } from '../src/operations.ts'
 import { JobRepository, validateText } from '../src/repo.ts'
 import type { CommandRunner } from '../src/repo.ts'
