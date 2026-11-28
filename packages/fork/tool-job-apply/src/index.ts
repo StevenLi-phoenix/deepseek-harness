@@ -15,8 +15,11 @@ export const name = 'tool-job-apply'
 export const inject = ['tools']
 
 interface Config {
+  /** Absolute path of the deployment-owned job clone that every repository, log, and issue operation reads and writes. */
   root: string
+  /** Tool roster of the preset that mounts this row: `apply` fills applications, `inbox` triages replies, `lead` runs a batch. */
   mode?: 'apply' | 'inbox' | 'lead'
+  /** Trusted path of the existing batch runbook `lead` hands to its workers; ignored by the other modes. */
   batchRunbook?: string
 }
 
