@@ -511,6 +511,7 @@ describe('the job-apply browser scope', () => {
     const browser = {
       currentJobHost: vi.fn(async () => 'jobs.example.test'),
       currentJobLinkHosts: vi.fn(async () => ['www.employer.example']),
+      currentJobFrameHosts: vi.fn(async () => ['job-boards.greenhouse.io']),
       runJob: async (owner: string, guard: ActionGuard, operation: () => Promise<unknown>) => {
         options.inspect?.(guard)
         return { owner, result: await operation() }
@@ -553,7 +554,7 @@ describe('the job-apply browser scope', () => {
     expect(tool('headless_browser_upload').parameters['properties']).toMatchObject({ files: { description: 'Only Resume.pdf or a cover_letters/<name>.pdf/.docx path.' } })
   })
 
-  it('answers the verification-code tool with the caller’s current host and linked hosts', async () => {
+  it('answers the verification-code tool with the caller’s current host, linked hosts and embedded hosts', async () => {
     const { ctx, browser } = await mount()
     const signal = new AbortController().signal
     const jobApply = ctx.get('jobApplyBrowser')
@@ -562,6 +563,8 @@ describe('the job-apply browser scope', () => {
     expect(jobApply?.registrableDomain('jobs.example.co.uk')).toBe('example.co.uk')
     expect(browser.currentJobHost).toHaveBeenCalledWith('worker', signal)
     expect(browser.currentJobLinkHosts).toHaveBeenCalledWith('worker', signal)
+    expect(await jobApply?.frameHosts('worker', signal)).toEqual(['job-boards.greenhouse.io'])
+    expect(browser.currentJobFrameHosts).toHaveBeenCalledWith('worker', signal)
   })
 
   it('refuses a call without an active Session, and every call once the scope is disposed', async () => {

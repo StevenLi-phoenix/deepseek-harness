@@ -601,6 +601,25 @@ export class HeadlessBrowserSession {
   }
 
   /**
+   * Hosts of the pages the caller's current job page embeds, so an ATS form inside an employer's careers page can take
+   * its vendor's mail: Esri's posting at www.esri.com embeds Greenhouse's application form.
+   * @param session - trusted identity of the calling Session.
+   * @param signal - cancellation of the verification request.
+   * @returns distinct http(s) hostnames of the current page's child frames, in document order; empty when unknown.
+   */
+  async currentJobFrameHosts(session: string, signal?: AbortSignal): Promise<string[]> {
+    signal?.throwIfAborted()
+    const page = await this.#currentJobPage(session)
+    if (page === null) return []
+    const hosts = new Set<string>()
+    for (const frame of page.mainFrame().childFrames()) {
+      const url = URL.parse(frame.url())
+      if (url !== null && (url.protocol === 'https:' || url.protocol === 'http:')) hosts.add(safeHost(url.href))
+    }
+    return [...hosts]
+  }
+
+  /**
    * The active tab is whichever Session acted last; the caller's page is its own most recently used tab.
    * @param session - trusted identity of the calling Session.
    * @returns that tab's live, protected, admitted page, or null.

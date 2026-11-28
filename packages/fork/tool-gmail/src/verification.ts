@@ -9,6 +9,8 @@ interface JobApplyBrowser {
   currentHost(sessionId: string, signal?: AbortSignal): Promise<string | null>
   /** Link hostnames of the caller's current job page. */
   linkedHosts?(sessionId: string, signal?: AbortSignal): Promise<readonly string[]>
+  /** Hostnames of the pages the caller's current job page embeds. */
+  frameHosts?(sessionId: string, signal?: AbortSignal): Promise<readonly string[]>
   registrableDomain(host: string): string | null
 }
 
@@ -34,6 +36,13 @@ const EMPLOYER_MAIL_ATS = new Set(['oraclecloud.com', 'taleo.net', 'salesforce-s
  * "Powered by eightfold.ai" in its footer. Such a sender is accepted when an open page of that site links to it.
  */
 const VENDOR_MAIL_ATS = new Set(['eightfold.ai'])
+
+/**
+ * ATS vendors whose application form an employer embeds in its own careers page: Esri's posting at www.esri.com embeds
+ * Greenhouse's job_app form, and Greenhouse mailed its security code from us.greenhouse-mail.io (2026-11-28). Such a
+ * vendor's sender is accepted while the caller's current page embeds a frame on one of that vendor's domains.
+ */
+const EMBEDDED_ATS = new Set(['greenhouse.io', 'greenhouse-mail.io'])
 
 /** Account platforms an ATS page never vouches for, so a hostile tenant cannot relay their sign-in codes. */
 const UNVOUCHED_DOMAINS = new Set([
@@ -136,6 +145,27 @@ function vouchingSite(browser: JobApplyBrowser, site: string, sender: string): b
   return (EMPLOYER_MAIL_ATS.has(site) || VENDOR_MAIL_ATS.has(sender)) && !UNVOUCHED_DOMAINS.has(sender) && browser.linkedHosts !== undefined
 }
 
+/**
+ * @param browser - the preset's browser bridge.
+ * @param sessionId - the trusted calling Session.
+ * @param sender - the requested sender's registrable domain.
+ * @param signal - cancellation of the request.
+ * @returns the host of the frame on the sender's ATS that the caller's current page embeds, or null.
+ */
+async function embeddingFrame(browser: JobApplyBrowser, sessionId: string, sender: string, signal: AbortSignal): Promise<string | null> {
+  if (!EMBEDDED_ATS.has(sender) || browser.frameHosts === undefined || signal.aborted) return null
+  try {
+    const hosts = await browser.frameHosts(sessionId, signal)
+    return hosts.map(normalizeHost).find((host): host is string => {
+      const domain = registrable(browser, host)
+      return host !== null && domain !== null && sameSite(domain, sender)
+    }) ?? null
+  } catch {
+    // A page whose frames cannot be listed embeds nothing.
+    return null
+  }
+}
+
 /** What a worker does when the application step of an Oracle, Taleo or Eightfold site links nowhere. */
 const VOUCH_HINT = 'No page of this site open in your tabs links to that sender domain. Open the job\'s posting page on '
   + 'this same site in a second tab with headless_browser_open (it links to the employer\'s own website and its ATS vendor), keep the '
@@ -182,7 +212,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
   }))
   ctx.tools.register(defineTool({
     name: 'gmail_verification_code',
-    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched; on Oracle Cloud HCM, Taleo or a Salesforce Site it may also be the employer domain that one of your open pages on that host links to, and on a careers site Eightfold runs it may be eightfold.ai when an open page there links to it (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
+    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched, and a Greenhouse form embedded in the employer page counts as live; on Oracle Cloud HCM, Taleo or a Salesforce Site it may also be the employer domain that one of your open pages on that host links to, and on a careers site Eightfold runs it may be eightfold.ai when an open page there links to it (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
     parameters: {
       account: { type: 'string', required: true, description: 'Account id from gmail_accounts.' },
       sender_domain: { type: 'string', required: true, description: 'Expected sender domain, not a URL or email address.' },
@@ -201,18 +231,21 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
       const site = registrable(browser, before)
       const sender = registrable(browser, input.sender_domain)
       if (site === null || sender === null) return mismatch()
-      const vouched = !sameSite(site, sender) && await vouchedEmployer(browser, sessionId, site, sender, exec.signal)
-      if (!sameSite(site, sender) && !vouched) {
+      const ownSite = sameSite(site, sender)
+      const frame = ownSite ? null : await embeddingFrame(browser, sessionId, sender, exec.signal)
+      const vouched = !ownSite && frame === null && await vouchedEmployer(browser, sessionId, site, sender, exec.signal)
+      if (!ownSite && frame === null && !vouched) {
         if (!vouchingSite(browser, site, sender)) return mismatch()
         ctx.logger.warn('tool-gmail: gmail_verification_code domain_mismatch: no open %s page links to %s', before, sender)
         return { ...NO_CODE, error: 'domain_mismatch', hint: VOUCH_HINT }
       }
-      if (sensitive(before) || sensitive(site) || sensitive(input.sender_domain) || sensitive(sender)) {
+      if (sensitive(before) || sensitive(site) || sensitive(input.sender_domain) || sensitive(sender) || sensitive(frame)) {
         ctx.logger.warn('tool-gmail: gmail_verification_code sensitive_sender')
         return { ...NO_CODE, error: 'sensitive_sender' }
       }
 
       if (vouched) ctx.logger.info('tool-gmail: gmail_verification_code sender %s vouched by the %s page', sender, site)
+      if (frame !== null) ctx.logger.info('tool-gmail: gmail_verification_code sender %s for the %s form the %s page embeds', sender, frame, site)
 
       // Strict-schema providers fill an unused integer with 0, which means "not set", not "the last minute".
       const requested = input.lookback_minutes
@@ -234,12 +267,12 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
               if (linkDomain === null || sensitive(host) || sensitive(linkDomain)) return false
               return sameSite(sender, linkDomain) || vouched && linkDomain === site
             },
-            liveHost: before,
+            liveHost: frame ?? before,
             after: now - since * MINUTE_MS,
             before: now,
             signal: exec.signal,
           })
-          if (found !== null && (answer === null || outranks(found, answer, before))) answer = found
+          if (found !== null && (answer === null || outranks(found, answer, frame ?? before))) answer = found
         }
       } catch {
         // API diagnostics may contain message ids or caller data. Only emit the stable failure key.

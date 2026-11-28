@@ -1272,6 +1272,19 @@ describe('job-apply calls over the fake page', () => {
     const { session } = harness()
     expect(await session.currentJobHost('w')).toBeNull()
     expect(await session.currentJobLinkHosts('w')).toEqual([])
+    expect(await session.currentJobFrameHosts('w')).toEqual([])
+    await session.close()
+  })
+
+  it('names the http(s) hosts the current job page embeds, once each, for an ATS form inside an employer page', async () => {
+    const { session, page } = await withJobTab('https://www.esri.com/careers/5070853007')
+    page.frames.push(
+      { url: 'https://job-boards.greenhouse.io/embed/job_app?for=esri', box: { width: 600, height: 900 }, body: '<input id="code">' },
+      { url: 'about:blank', box: { width: 1, height: 1 }, body: '' },
+      { url: 'https://Job-Boards.Greenhouse.io./embed/other', box: { width: 600, height: 900 }, body: '' },
+    )
+    expect(await session.currentJobFrameHosts('w')).toEqual(['job-boards.greenhouse.io'])
+    expect(await session.currentJobFrameHosts('other')).toEqual([])
     await session.close()
   })
 

@@ -13,7 +13,7 @@ const MISMATCH = { ...NO_CODE, error: 'domain_mismatch' }
 const ARGS = { account: 'work', sender_domain: 'Mail.Example.CO.UK.' }
 const SESSION = openTurn([], [], 'job-session')
 
-async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrowser = true, mode: ToolGmail.Config['mode'] = 'verification-only', links: string[] = []) {
+async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrowser = true, mode: ToolGmail.Config['mode'] = 'verification-only', links: string[] = [], frames: string[] = []) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
@@ -26,6 +26,7 @@ async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrow
   }
   const currentHost = vi.fn(async (_id: string, _signal?: AbortSignal) => host)
   const linkedHosts = vi.fn(async (_id: string, _signal?: AbortSignal): Promise<readonly string[]> => links)
+  const frameHosts = vi.fn(async (_id: string, _signal?: AbortSignal): Promise<readonly string[]> => frames)
   // This is a deliberately small fixture, not a replacement PSL implementation.
   const registrableDomain = vi.fn((value: string) => {
     const labels = value.split('.')
@@ -36,14 +37,14 @@ async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrow
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
   ctx.provide('gmail', gmail as never)
-  if (provideBrowser) ctx.provide('jobApplyBrowser', { currentHost, linkedHosts, registrableDomain })
+  if (provideBrowser) ctx.provide('jobApplyBrowser', { currentHost, linkedHosts, frameHosts, registrableDomain })
   await ctx.plugin(ToolGmail, { timeZone: 'UTC', mode })
   const invoke = async (args: Record<string, unknown>, withAgent = true, signal = new AbortController().signal) => {
     const tool = ctx.tools.get('gmail_verification_code')!
     const value = await tool.execute(args, { agent: withAgent ? { session: SESSION } : undefined, signal } as never)
     return { value, content: tool.output.render(args, value as JsonValue) }
   }
-  return { ctx, gmail, logs, currentHost, linkedHosts, registrableDomain, invoke }
+  return { ctx, gmail, logs, currentHost, linkedHosts, frameHosts, registrableDomain, invoke }
 }
 
 afterEach(async () => {
@@ -228,6 +229,40 @@ describe('verification-only mode', () => {
     const bare = await mount('careers.qualcomm.com', true, 'verification-only', ['www.qualcomm.com'])
     expect((await bare.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') as string })
     expect(bare.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('accepts Greenhouse\'s sender for the Greenhouse form an employer page embeds, as Esri\'s posting does', async () => {
+    // Live Esri 5070853007 at www.esri.com, 2026-11-28 02:56: the security code came from us.greenhouse-mail.io, and
+    // greenhouse.io answered domain_mismatch because the page itself is the employer's.
+    const h = await mount('www.esri.com', true, 'verification-only', [], ['www.youtube.com', 'job-boards.greenhouse.io'])
+    const asked: string[] = []
+    h.gmail.verificationCode.mockImplementation(async (_account, lookup) => {
+      asked.push(lookup.domain)
+      expect(lookup.liveHost).toBe('job-boards.greenhouse.io')
+      return lookup.domain === 'greenhouse-mail.io' ? { ...RESULT, domain: 'greenhouse-mail.io' } : null
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'us.greenhouse-mail.io' })).value).toMatchObject({ found: true, from_domain: 'greenhouse-mail.io' })
+    expect(asked).toEqual(['greenhouse-mail.io', 'greenhouse.io'])
+    expect(h.frameHosts).toHaveBeenCalledWith('job-session', expect.anything())
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code sender %s for the %s form the %s page embeds')
+    expect((await h.invoke({ ...ARGS, sender_domain: 'greenhouse.io' })).value).toMatchObject({ found: true })
+  })
+
+  it.each([
+    ['no Greenhouse frame', 'greenhouse.io', ['www.youtube.com']],
+    ['an embedded page of a vendor that is not pinned', 'lever.co', ['jobs.lever.co']],
+    ['an embedded sign-in page', 'linkedin.com', ['www.linkedin.com']],
+  ])('refuses the sender of an employer page that embeds %s', async (_case, sender_domain, frames) => {
+    const h = await mount('www.esri.com', true, 'verification-only', [], frames)
+    expect((await h.invoke({ ...ARGS, sender_domain })).value).toEqual(MISMATCH)
+    expect(h.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('refuses the embedded vendor when the page\'s frames cannot be listed', async () => {
+    const h = await mount('www.esri.com', true, 'verification-only', [], ['job-boards.greenhouse.io'])
+    h.frameHosts.mockRejectedValue(new Error('page gone'))
+    expect((await h.invoke({ ...ARGS, sender_domain: 'greenhouse.io' })).value).toEqual(MISMATCH)
+    expect(h.gmail.verificationCode).not.toHaveBeenCalled()
   })
 
   it('tells the caller to open the posting page when no open Oracle page links to the employer sender', async () => {

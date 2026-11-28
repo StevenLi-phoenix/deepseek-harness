@@ -42,6 +42,8 @@ declare module '@deepseek-ai/cordis' {
       currentHost(sessionId: string, signal?: AbortSignal): Promise<string | null>
       /** Link hostnames of the caller's current job page, for an ATS page that vouches for its employer's mail domain. */
       linkedHosts(sessionId: string, signal?: AbortSignal): Promise<readonly string[]>
+      /** Hostnames of the pages the caller's current job page embeds, for an ATS form inside an employer's careers page. */
+      frameHosts(sessionId: string, signal?: AbortSignal): Promise<readonly string[]>
       registrableDomain(host: string): string | null
     }
   }
