@@ -85,8 +85,11 @@ describe('the shipped notify-learning rows, booted through the Loader', () => {
   it('learns a rule from two exchanges on WeChat, tells the owner, shows it to the next proactive turns, and lets the owner delete it', { timeout: 60_000 }, async () => {
     // One root row; the tools row only in the preset that faces the owner.
     expect(rootRows.map(row => row.id)).toEqual(['notify-learning'])
-    expect(Object.fromEntries(presetRows.map(row => [row.config?.id, learnRowsOf(row).map(item => [item.id, item.config])])))
-      .toEqual({ 'unattended': [['notify-learning-tools', { mode: 'tools' }]], 'notify': [], 'bili': [], 'up': [], 'qq-digest': [], 'qq-main': [], 'qqbot': [] })
+    const withRows = presetRows.flatMap((row) => {
+      const rows = learnRowsOf(row)
+      return rows.length === 0 ? [] : [[row.config?.id, rows.map(item => [item.id, item.config])]]
+    })
+    expect(Object.fromEntries(withRows)).toEqual({ unattended: [['notify-learning-tools', { mode: 'tools' }]] })
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(Date.parse('2026-11-25T14:00:00Z'))
     const cwd = await mkdtemp(join(tmpdir(), 'dsh-notify-learning-composition-'))
