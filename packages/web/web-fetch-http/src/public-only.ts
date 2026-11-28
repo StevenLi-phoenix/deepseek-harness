@@ -48,18 +48,28 @@ export function publicDispatcher(url: URL, signal: AbortSignal): Agent {
     !hostname.includes('.') || localSuffixes.some(suffix => hostname === suffix || hostname.endsWith(`.${suffix}`))
   )) throw blocked(hostname)
 
+  // proxy-exempt: public-only fetch connects only to the addresses this lookup verified, so no ambient proxy may resolve the name again.
   return new Agent({ connect: { lookup: (_name, options, callback) => {
     // An absolute name avoids applying system DNS search suffixes. Check every answer even if
     // the socket requests a single family; never hand a private answer to the connector.
     void lookup(`${hostname}.`, { all: true }).then((addresses) => {
-      if (signal.aborted) return callback(new WebError('web fetch aborted', 'WEB_ABORTED'), '')
-      if (addresses.some(({ address, family }) => !isPublicAddress(address, family))) return callback(blocked(hostname), '')
+      if (signal.aborted) {
+        callback(new WebError('web fetch aborted', 'WEB_ABORTED'), '')
+        return
+      }
+      if (addresses.some(({ address, family }) => !isPublicAddress(address, family))) {
+        callback(blocked(hostname), '')
+        return
+      }
       const wanted = options.family === 'IPv4' ? 4 : options.family === 'IPv6' ? 6 : options.family
       const eligible = wanted === 4 || wanted === 6 ? addresses.filter(record => record.family === wanted) : addresses
       const first = eligible[0]
-      if (first === undefined) return callback(new WebError('DNS returned no usable addresses', 'WEB_FETCH_DNS_FAILED'), '')
+      if (first === undefined) {
+        callback(new WebError('DNS returned no usable addresses', 'WEB_FETCH_DNS_FAILED'), '')
+        return
+      }
       if (options.all) callback(null, eligible)
       else callback(null, first.address, first.family)
-    }, (error: unknown) => callback(error instanceof Error ? error : new Error('DNS lookup failed', { cause: error }), ''))
+    }, (error: unknown) => { callback(error instanceof Error ? error : new Error('DNS lookup failed', { cause: error }), '') })
   } } })
 }

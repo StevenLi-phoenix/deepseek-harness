@@ -3,7 +3,7 @@ import { constants } from 'node:fs'
 import { lstat, open, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { CredentialVault } from './credentials.ts'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
@@ -33,6 +33,8 @@ const removed = new Set(['allowOrigin', 'newTab', 'urlSubstring'])
 const barePdf = /^[a-zA-Z0-9_-]+\.pdf$/u
 const coverLetter = /^cover_letters\/([a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}\.(?:pdf|docx))$/u
 const docxType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const SNAPSHOT_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const satisfies readonly ImageMediaType[]
+const REQUIRED_INTEGER = { type: 'integer', required: true } as const
 
 /** Strict upload policy for exact PDF names; never give Chromium a local filesystem path. */
 export class JobApplyUploads {
@@ -191,10 +193,10 @@ export function mountJobApplyBrowser(ctx: Context, config: Config, restriction: 
         path: { type: 'string', required: true },
         image: { type: 'object', required: true, additionalProperties: false, properties: {
           attachmentId: { type: 'string', required: true },
-          mediaType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], required: true },
-          bytes: { type: 'integer', required: true },
-          width: { type: 'integer', required: true },
-          height: { type: 'integer', required: true },
+          mediaType: { type: 'string', enum: SNAPSHOT_MEDIA_TYPES, required: true },
+          bytes: REQUIRED_INTEGER,
+          width: REQUIRED_INTEGER,
+          height: REQUIRED_INTEGER,
         } },
       } },
       render: (_args, value) => [

@@ -74,7 +74,7 @@ describe.each(['named', 'point'] as const)('job-apply guard for %s actions', (mo
     const guard = new ActionGuard({ sensitivePolicy: 'job-apply' })
     const target = control('Submit & Continue', action === 'click' ? { href: external } : { formAction: external })
     expect(act(guard, mode, action, target).allowed).toBe(true)
-    expect(guard.log.list()).toContainEqual(expect.objectContaining({ kind: 'allow', rule: 'origin', reason: expect.stringMatching(/deny list still applies/u) }))
+    expect(guard.log.list().find(entry => entry.kind === 'allow' && entry.rule === 'origin')?.reason).toMatch(/deny list still applies/u)
     // The shared guard still asks for allowOrigin.
     expect(refusalOf(act(new ActionGuard(), mode, action, control('Continue', action === 'click' ? { href: external } : { formAction: external }))).rule).toBe('origin')
   })

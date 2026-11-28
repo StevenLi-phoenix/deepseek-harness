@@ -115,6 +115,7 @@ export class HttpFetchProvider implements WebFetchProvider {
     try {
       // Keep the Node-only transport out of browser-worker startup; a real request loads it here.
       const { fetch } = await import('undici')
+      // proxy-exempt: only the public-only dispatcher is passed; a proxy would resolve the name again, past its address check.
       return await fetch(url, { method: 'GET', redirect: 'manual', headers, signal, ...dispatcher === undefined ? {} : { dispatcher } })
     } catch (error: unknown) {
       // Undici wraps a connector's policy failure as the Fetch TypeError cause.
