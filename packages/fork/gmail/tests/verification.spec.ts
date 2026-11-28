@@ -133,6 +133,22 @@ describe('Gmail verification proofs', () => {
     expect(await h.run()).toBeNull()
   })
 
+  it('takes the verification link over a number far from any verification wording, as in a Workday account email', async () => {
+    // WellSky's Workday account email (2026-11-28) carried a stray number, and the tool answered it instead of the link.
+    const link = 'https://mail.example.co.uk/verify?token=abc'
+    const h = fixture([message('workday', 'Verify your account', { body: simplePart([
+      'Hi, please verify your account to finish creating it.', link, '',
+      'If you did not create this account, ignore this email.',
+      'Office: 11300 Switzer Road, Overland Park, KS 66210', '© 2026 Workday, Inc. All rights reserved.',
+    ].join('\n')) })])
+    expect(await h.run()).toEqual({ code: null, link, domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: false })
+  })
+
+  it('reads a code just before its verification wording', async () => {
+    const h = fixture([message('before', 'Welcome', { body: simplePart('Use 482913 to sign in. Our office is at 11300 Switzer Road.') })])
+    expect(await h.run()).toEqual(result('482913'))
+  })
+
   it('returns a code instead of a newer link, and otherwise marks competing verification links ambiguous', async () => {
     const links = [
       message('new', 'Verify account', { body: simplePart('https://mail.example.co.uk/verify?a=new') }),

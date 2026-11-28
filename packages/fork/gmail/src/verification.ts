@@ -63,12 +63,31 @@ function inlinePart(part: GmailPart | undefined): GmailPart | undefined {
   }) }
 }
 
+// A code sits next to the wording that introduces it: up to 40 characters after it ("verification code: 1234",
+// "本次验证码001234") or 24 before it ("Use 1234 to sign in"). A number elsewhere in a verification message, such as an
+// office address or a footer year, is not one: WellSky's Workday account email (2026-11-28) lost its link to one.
+const CODE_AFTER_WORDING = 40
+const CODE_BEFORE_WORDING = 24
+const CODES = new RegExp(CODE.source, 'giu')
+const VERIFY_WORDS = new RegExp(VERIFY.source, 'giu')
+
+function codeNearWording(text: string): string | undefined {
+  const words = [...text.matchAll(VERIFY_WORDS)].map(word => ({ start: word.index, end: word.index + word[0].length }))
+  for (const match of text.matchAll(CODES)) {
+    const start = match.index
+    const end = start + match[0].length
+    if (words.some(word => (start >= word.end && start - word.end <= CODE_AFTER_WORDING)
+      || (word.start >= end && word.start - end <= CODE_BEFORE_WORDING))) return match[0]
+  }
+  return undefined
+}
+
 function codeFrom(subject: string, body: string): string | undefined {
   subject = subject.replace(URL_TEXT, ' ')
   body = body.replace(URL_TEXT, ' ')
-  // A message can legitimately consist of just the code; otherwise require verification wording somewhere in it.
-  if (!BARE_CODE.test(subject.trim()) && !BARE_CODE.test(body.trim()) && !VERIFY.test(subject) && !VERIFY.test(body)) return undefined
-  return CODE.exec(subject)?.[0] ?? CODE.exec(body)?.[0]
+  // A message can legitimately consist of just the code.
+  const bare = [subject.trim(), body.trim()].find(text => BARE_CODE.test(text))
+  return bare ?? codeNearWording(subject) ?? codeNearWording(body)
 }
 
 const VERIFY_PATH = /(?:^|[/_-])(?:verif(?:y|ication)|activate|confirm|validate|magic[-_]?link|sso|sign[-_]?in)(?:[/.?_&-]|$)/iu

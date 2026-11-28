@@ -12,6 +12,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Fixed
+- Gmail verification lookups return the link of a link-only email (2026-11-28): any 4–8 digit number in a message with verification wording counted as its code, and a code wins over a link, so WellSky's Workday account email answered a stray number with `link: null` and the application stopped at step 1. A code must now sit within 40 characters after the wording or 24 before it.
 - Job-apply clicks a SmartRecruiters dropdown option (2026-11-28): the option's label is light DOM slotted into its `role=option` through an `spl-tooltip`, and the hit test walked up by parent and shadow host but not through the slot, so Optimizely's Country/Region choice scored `occlusion=0.00` and the application stopped on page 1. The hit test now climbs through `assignedSlot`.
 - Job-apply saves through a `javascript:` form action (2026-11-28): the target check skipped a `javascript:` link but not a form whose action is `javascript:`, so the Save button of AAIM's contact modal (Guarantee Electrical) was refused as `navigation_refused: [invalid URL]`. Whatever that page script then loads still meets the network deny list.
 - Job-lead recovers from a structured context overflow by replacing the Session, keeping its old log and any attached schedules. The relay remembers the replacement without editing the profile, limits resets to one per 30 minutes and three per rolling day, and caps forwarded job-lead text at 8 KiB by default.
