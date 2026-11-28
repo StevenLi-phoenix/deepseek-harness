@@ -177,6 +177,27 @@ describe('Gmail verification proofs', () => {
     expect(await h.run({ ...LOOKUP, liveHost: 'careers.example.co.uk' })).toEqual({ code: null, link: 'https://pinned-mailer.example/verify?a=other-tenant', domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: true })
   })
 
+  it.each([
+    ['its path', 'Password Reset', 'Hello, we received your request. https://mail.example.co.uk/en-US/Site/passwordreset/abc123'],
+    ['wording just before it', 'Your account', 'Click the link below to reset your password: https://mail.example.co.uk/welcome?t=7'],
+    ['a reset subject when it is the only link', 'Reset Password', 'Open https://mail.example.co.uk/welcome?t=8'],
+  ])('takes a password reset link by %s, as Priceline\'s Workday recovery email sends one', async (_case, subject, body) => {
+    // 2026-11-28 06:45: the worker reset the password of an existing Workday account and the reader took no link.
+    const h = fixture([message('reset', subject, { body: simplePart(`${body}\nOffice: 800 Connecticut Avenue, Norwalk, CT 06854`) })])
+    expect(await h.run()).toEqual({ code: null, link: body.slice(body.indexOf('https://')), domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: false })
+  })
+
+  it('reads only the pinned sender address when one is given, as Goldman Sachs mails from gsrecruiting@oracle.com', async () => {
+    const h = fixture([
+      message('account', 'Your sign-in code is 1111', { sender: 'Accounts <account@mail.example.co.uk>' }),
+      message('pinned', 'Your verification code is 2222', { beforeMs: 2000, sender: 'Recruiting <Recruiting@Mail.Example.co.uk>' }),
+    ])
+    expect(await h.run({ ...LOOKUP, address: 'recruiting@mail.example.co.uk' })).toEqual(result('2222', NOW - 2000))
+    expect(h.calls[0]?.searchParams.get('q')).toBe('from:recruiting@mail.example.co.uk after:1699998199 -in:sent -in:drafts')
+    await expect(h.run({ ...LOOKUP, address: 'recruiting@other.example' })).rejects.toThrow('invalid verification address')
+    await expect(h.run({ ...LOOKUP, address: 'a@mail.example.co.uk OR from:x.com' })).rejects.toThrow('invalid verification address')
+  })
+
   it('finds nothing when no message matches', async () => {
     expect(await fixture([]).run()).toBeNull()
   })

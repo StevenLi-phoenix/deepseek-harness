@@ -6,6 +6,8 @@ import { bodyText, header, trimQuoted, type GmailMessage, type GmailPart } from 
 /** A browser-authorized sender domain and the bounded receipt window. */
 export interface VerificationLookup {
   readonly domain: string
+  /** One exact sender address within `domain`, for a tenant pinned to a shared mail domain (gsrecruiting@oracle.com). */
+  readonly address?: string
   readonly domainOf: (host: string) => string | null
   readonly allowsLinkHost: (host: string) => boolean
   /** Host of the caller's live page: a link on it outranks links on other hosts, since Workday mails every tenant from myworkday.com. */
@@ -30,14 +32,17 @@ const VERIFY = new RegExp([
   String.raw`\b(?:authenticat(?:e|ion)|one[ -]time|otp|passcode|sign[ -]?in|log[ -]?in)\b`,
   String.raw`验证码|驗證碼|認証コード|인증\s*코드|c[oó]digo de verifi(?:caci[oó]n|cação)|code de v[ée]rification|bestätigungscode`,
 ].join('|'), 'iu')
+// Recovery wording vouches for a link but never for a code: a reset email's office address is not one.
+const RESET = /\b(?:reset(?: your)? password|password reset|forgot(?: your)? password)\b/iu
+const ADDRESS = /^[a-z0-9._%+-]+@[a-z0-9.-]+$/u
 
-function senderHost(payload: GmailPart | undefined): string | null {
+function senderAddress(payload: GmailPart | undefined): string | null {
   const senders = payload?.headers?.filter(entry => entry.name.toLowerCase() === 'from') ?? []
   if (senders.length !== 1 || senders[0] === undefined) return null
   try {
     const mailbox = parseMailbox(senders[0].value)
     if (mailbox.name.includes('@')) return null // A display-name address is not a second sender.
-    return mailbox.address.slice(mailbox.address.lastIndexOf('@') + 1)
+    return mailbox.address.toLowerCase()
   } catch (error: unknown) {
     /* v8 ignore else -- parseMailbox throws only AddressProblem. */
     if (error instanceof AddressProblem) return null
@@ -51,8 +56,9 @@ function receivedAt(message: GmailMessage, lookup: VerificationLookup): number |
   if (!/^[0-9]+$/u.test(message.internalDate ?? '')) return null
   const time = Number(message.internalDate)
   if (!Number.isSafeInteger(time) || time < lookup.after || time > lookup.before) return null
-  const sender = senderHost(message.payload)
-  return sender !== null && lookup.domainOf(sender) === lookup.domain ? time : null
+  const sender = senderAddress(message.payload)
+  if (sender === null || (lookup.address !== undefined && sender !== lookup.address)) return null
+  return lookup.domainOf(sender.slice(sender.lastIndexOf('@') + 1)) === lookup.domain ? time : null
 }
 
 /** Exclude named, attached, or forwarded MIME subtrees, even when Gmail returns inline part data. */
@@ -92,7 +98,8 @@ function codeFrom(subject: string, body: string): string | undefined {
   return bare ?? codeNearWording(subject) ?? codeNearWording(body)
 }
 
-const VERIFY_PATH = /(?:^|[/_-])(?:verif(?:y|ication)|activate|confirm|validate|magic[-_]?link|sso|sign[-_]?in)(?:[/.?_&-]|$)/iu
+const VERIFY_PATH = new RegExp(String.raw`(?:^|[/_-])(?:verif(?:y|ication)|activate|confirm|validate|magic[-_]?link|sso|sign[-_]?in`
+  + String.raw`|reset(?:[-_]?password)?|password[-_]?reset|forgot[-_]?password)(?:[/.?_&-]|$)`, 'iu')
 
 function linkFrom(subject: string, body: string, lookup: VerificationLookup): string | undefined {
   const matches = [...body.matchAll(URL_TEXT)]
@@ -101,13 +108,14 @@ function linkFrom(subject: string, body: string, lookup: VerificationLookup): st
     const url = URL.parse(raw)
     if (url === null || url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.port !== '' || !lookup.allowsLinkHost(url.hostname)) continue
     const before = body.slice(Math.max(0, match.index - 100), match.index)
-    if (VERIFY_PATH.test(url.pathname) || VERIFY.test(before) || (matches.length === 1 && VERIFY.test(subject))) return url.href
+    const worded = (text: string) => VERIFY.test(text) || RESET.test(text)
+    if (VERIFY_PATH.test(url.pathname) || worded(before) || (matches.length === 1 && worded(subject))) return url.href
   }
   return undefined
 }
 
 /**
- * Look for a recent verification code, falling back to a verification link, without opening attachments.
+ * Look for a recent verification code, falling back to a verification or password reset link, without opening attachments.
  * @param api - the account API.
  * @param lookup - the scoped sender and date bounds.
  * @param limit - maximum matching metadata reads; an incomplete result must not report a code.
@@ -120,9 +128,13 @@ export async function readVerificationCode(
   api: GmailApi, lookup: VerificationLookup, limit: number, maxHtmlChars: number, maxBodyChars: number,
 ): Promise<VerificationProof | null> {
   if (!/^[a-z0-9.-]+$/u.test(lookup.domain)) throw new GmailError('invalid', 'invalid verification domain')
+  const { address } = lookup
+  if (address !== undefined && (!ADDRESS.test(address) || lookup.domainOf(address.slice(address.lastIndexOf('@') + 1)) !== lookup.domain)) {
+    throw new GmailError('invalid', 'invalid verification address')
+  }
   // Gmail documents epoch seconds; querying from one second earlier preserves the inclusive local boundary.
   const afterSeconds = Math.floor(lookup.after / 1000) - 1
-  const query = `from:${lookup.domain} after:${afterSeconds} -in:sent -in:drafts`
+  const query = `from:${address ?? lookup.domain} after:${afterSeconds} -in:sent -in:drafts`
   const page = await api.listMessages(query, limit, lookup.signal)
   if (page.nextPageToken !== undefined || (page.messages?.length ?? 0) > limit) throw new GmailError('limit', 'too many verification candidates')
   const ids = [...new Set((page.messages ?? []).map(({ id }) => id))]

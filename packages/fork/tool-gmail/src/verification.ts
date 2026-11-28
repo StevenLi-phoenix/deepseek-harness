@@ -44,6 +44,23 @@ const VENDOR_MAIL_ATS = new Set(['eightfold.ai'])
  */
 const EMBEDDED_ATS = new Set(['greenhouse.io', 'greenhouse-mail.io'])
 
+/**
+ * Exact sender addresses an enterprise ATS tenant mails candidates from on a shared mail domain that no page may vouch
+ * for: Goldman Sachs' Oracle Recruiting site at hdpc.fa.us2.oraclecloud.com sent its "Confirm Your Identity" code from
+ * gsrecruiting@oracle.com (2026-11-28; every Goldman mail since 2026-08 came from that address). oracle.com also mails
+ * Oracle's own account codes, so the pin names one address on one tenant host, never the domain.
+ */
+const TENANT_SENDERS: ReadonlyMap<string, readonly string[]> = new Map([
+  ['hdpc.fa.us2.oraclecloud.com', ['gsrecruiting@oracle.com']],
+])
+
+/**
+ * Multi-tenant ATS domains whose first host label names the employer (priceline.wd1.myworkdayjobs.com). Workday mails
+ * every tenant from the same domains, so a link on another tenant's host belongs to another employer's account: Bracco's
+ * account link answered the Priceline worker's lookup (2026-11-28).
+ */
+const TENANT_LABEL_DOMAINS = new Set(['myworkdayjobs.com'])
+
 /** Account platforms an ATS page never vouches for, so a hostile tenant cannot relay their sign-in codes. */
 const UNVOUCHED_DOMAINS = new Set([
   'linkedin.com', 'joinhandshake.com', 'indeed.com', 'glassdoor.com', 'amazon.com', 'amazon.dev', 'facebook.com', 'meta.com',
@@ -166,6 +183,28 @@ async function embeddingFrame(browser: JobApplyBrowser, sessionId: string, sende
   }
 }
 
+/**
+ * @param browser - the preset's browser bridge.
+ * @param live - the caller's live host.
+ * @param host - a link's host.
+ * @returns whether the link is on another employer's tenant of the live host's multi-tenant ATS.
+ */
+function otherTenant(browser: JobApplyBrowser, live: string, host: string): boolean {
+  const domain = registrable(browser, host)
+  if (domain === null || !TENANT_LABEL_DOMAINS.has(domain) || registrable(browser, live) !== domain) return false
+  return normalizeHost(host)?.split('.')[0] !== live.split('.')[0]
+}
+
+/**
+ * @param browser - the preset's browser bridge.
+ * @param live - the caller's live host.
+ * @param sender - the requested sender's registrable domain.
+ * @returns the exact address pinned to that tenant host within the sender's domain, if any.
+ */
+function pinnedSender(browser: JobApplyBrowser, live: string, sender: string): string | undefined {
+  return TENANT_SENDERS.get(live)?.find(address => registrable(browser, address.slice(address.lastIndexOf('@') + 1)) === sender)
+}
+
 /** What a worker does when the application step of an Oracle, Taleo or Eightfold site links nowhere. */
 const VOUCH_HINT = 'No page of this site open in your tabs links to that sender domain. Open the job\'s posting page on '
   + 'this same site in a second tab with headless_browser_open (it links to the employer\'s own website and its ATS vendor), keep the '
@@ -193,8 +232,9 @@ function registrable(browser: JobApplyBrowser, value: unknown): string | null {
  */
 function outranks(found: VerificationProof, answer: VerificationProof, live: string): boolean {
   if (found.link !== null && answer.link !== null) {
-    const foundLive = URL.parse(found.link)?.hostname === live
-    if (foundLive !== (URL.parse(answer.link)?.hostname === live)) return foundLive
+    // The reader returns parsed absolute URLs' hrefs.
+    const foundLive = new URL(found.link).hostname === live
+    if (foundLive !== (new URL(answer.link).hostname === live)) return foundLive
   }
   return found.receivedAt > answer.receivedAt
 }
@@ -212,7 +252,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
   }))
   ctx.tools.register(defineTool({
     name: 'gmail_verification_code',
-    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched, and a Greenhouse form embedded in the employer page counts as live; on Oracle Cloud HCM, Taleo or a Salesforce Site it may also be the employer domain that one of your open pages on that host links to, and on a careers site Eightfold runs it may be eightfold.ai when an open page there links to it (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
+    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification or password reset link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched (a link for another Workday tenant is never returned), and a Greenhouse form embedded in the employer page counts as live; a few Oracle tenants mail from one pinned address on oracle.com (Goldman Sachs: ask for oracle.com); on Oracle Cloud HCM, Taleo or a Salesforce Site it may also be the employer domain that one of your open pages on that host links to, and on a careers site Eightfold runs it may be eightfold.ai when an open page there links to it (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
     parameters: {
       account: { type: 'string', required: true, description: 'Account id from gmail_accounts.' },
       sender_domain: { type: 'string', required: true, description: 'Expected sender domain, not a URL or email address.' },
@@ -233,8 +273,10 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
       if (site === null || sender === null) return mismatch()
       const ownSite = sameSite(site, sender)
       const frame = ownSite ? null : await embeddingFrame(browser, sessionId, sender, exec.signal)
-      const vouched = !ownSite && frame === null && await vouchedEmployer(browser, sessionId, site, sender, exec.signal)
-      if (!ownSite && frame === null && !vouched) {
+      const pinned = ownSite || frame !== null ? undefined : pinnedSender(browser, before, sender)
+      const admitted = ownSite || frame !== null || pinned !== undefined
+      const vouched = !admitted && await vouchedEmployer(browser, sessionId, site, sender, exec.signal)
+      if (!admitted && !vouched) {
         if (!vouchingSite(browser, site, sender)) return mismatch()
         ctx.logger.warn('tool-gmail: gmail_verification_code domain_mismatch: no open %s page links to %s', before, sender)
         return { ...NO_CODE, error: 'domain_mismatch', hint: VOUCH_HINT }
@@ -245,6 +287,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
       }
 
       if (vouched) ctx.logger.info('tool-gmail: gmail_verification_code sender %s vouched by the %s page', sender, site)
+      if (pinned !== undefined) ctx.logger.info('tool-gmail: gmail_verification_code sender %s pinned to the %s tenant', pinned, before)
       if (frame !== null) ctx.logger.info('tool-gmail: gmail_verification_code sender %s for the %s form the %s page embeds', sender, frame, site)
 
       // Strict-schema providers fill an unused integer with 0, which means "not set", not "the last minute".
@@ -253,26 +296,39 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
         ? Math.min(MAX_LOOKBACK_MINUTES, Math.max(1, requested))
         : DEFAULT_LOOKBACK_MINUTES
       const now = Date.now()
+      const live = frame ?? before
       let answer: VerificationProof | null = null
+      let foreign = 0
       try {
         // Each alias domain is its own Gmail search; the newest proof across them wins.
         for (const domain of senderDomains(sender)) {
           if (exec.signal.aborted) break
           const found = await gmail.verificationCode(input.account.trim(), {
             domain,
+            ...pinned === undefined ? {} : { address: pinned },
             domainOf: host => sensitive(host) ? null : registrable(browser, host),
             allowsLinkHost: (host) => {
               const linkDomain = registrable(browser, host)
-              // Mail vouched for by a page may link back to that page's site.
+              // Mail vouched for by a page may link back to that page's site; a pinned tenant's mail only to that tenant.
               if (linkDomain === null || sensitive(host) || sensitive(linkDomain)) return false
+              if (pinned !== undefined) return normalizeHost(host) === before
+              if (otherTenant(browser, live, host)) {
+                foreign += 1
+                return false
+              }
               return sameSite(sender, linkDomain) || vouched && linkDomain === site
             },
-            liveHost: frame ?? before,
+            liveHost: live,
             after: now - since * MINUTE_MS,
             before: now,
             signal: exec.signal,
           })
-          if (found !== null && (answer === null || outranks(found, answer, frame ?? before))) answer = found
+          // The reader returns a parsed absolute URL's href.
+          if (found !== null && found.link !== null && otherTenant(browser, live, new URL(found.link).hostname)) {
+            foreign += 1
+            continue
+          }
+          if (found !== null && (answer === null || outranks(found, answer, live))) answer = found
         }
       } catch {
         // API diagnostics may contain message ids or caller data. Only emit the stable failure key.
@@ -280,6 +336,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
         ctx.logger.warn('tool-gmail: gmail_verification_code lookup_failed')
         return { ...NO_CODE, error: 'lookup_failed' }
       }
+      if (foreign > 0) ctx.logger.warn('tool-gmail: gmail_verification_code dropped a link for another tenant of %s', site)
       // Compare the whole host, including the ATS tenant, rather than comparing only registrable domains.
       if (await liveHost(browser, sessionId, exec.signal) !== before) return mismatch()
       if (answer === null) return { ...NO_CODE }
