@@ -224,6 +224,23 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).title()).toBe('clicked')
   }, 120_000)
 
+  it('types into a react-select whose search input is transparent, as ADP draws its Country field', async () => {
+    // Live ADP WorkforceNow, 2026-11-27 20:58: MDFSelectBox__input scored opacity 0 and the arrow ariaHidden 0.
+    const app = await boot()
+    await load(app, [
+      '<div id="control" style="display:flex;width:300px;height:38px;border:1px solid #888;margin:40px;align-items:center">',
+      '<div style="flex:1;padding:0 8px;position:relative"><div id="shown" style="position:absolute;left:8px">Select...</div>',
+      '<div style="display:inline-grid"><input id="country" type="text" role="combobox" aria-autocomplete="list"',
+      ' aria-expanded="false" style="opacity:0;width:2px;border:0;padding:0;font:inherit"></div></div>',
+      '<div aria-hidden="true" style="width:30px">v</div><input type="hidden" name="country" value=""></div>',
+      '<script>document.getElementById("country").addEventListener("input", e => { document.getElementById("shown").textContent = e.target.value })</script>',
+    ].join(''))
+    const outcome = await app.browser.fill({ selector: '#country' }, 'United States')
+    expect(outcome.target).toMatchObject({ ref: '#country', index: 0 })
+    expect(outcome.target?.score).toBeGreaterThan(0.2)
+    expect(await (await app.browser.page()).locator('#shown').textContent()).toBe('United States')
+  }, 120_000)
+
   it('types a year into a Workday-style date segment drawn by an aria-hidden display', async () => {
     const app = await boot()
     await load(app, [

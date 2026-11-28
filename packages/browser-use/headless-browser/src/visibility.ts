@@ -273,6 +273,29 @@ export function probeElement(element: Element): ElementFacts {
       }
     }
   }
+  // A searchable dropdown that draws its own value (ADP's MDFSelectBox, a react-select) keeps its text input at
+  // opacity 0 until a person types, so what they see and click there is the control around it: the nearest box that
+  // holds the input's centre, has room for a click and holds no other control.
+  if (combobox && opacity <= 0.05 && area > 0) {
+    const centreX = rect.left + rect.width / 2
+    const centreY = rect.top + rect.height / 2
+    const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
+    const otherControl = (node: Element): boolean => Array.from(node.querySelectorAll(CONTROLS))
+      .some(control => control !== element && !(control instanceof HTMLInputElement && control.type === 'hidden'))
+    let field = element.parentElement
+    for (let depth = 0; field !== null && depth < 4 && !otherControl(field); depth += 1, field = field.parentElement) {
+      const box = field.getBoundingClientRect()
+      if (box.width * box.height >= 100 && box.left <= centreX && centreX <= box.right && box.top <= centreY && centreY <= box.bottom) {
+        let painted = 1
+        for (let current: Element | null = field; current !== null; current = parentOf(current)) {
+          const value = Number.parseFloat(view.getComputedStyle(current).opacity)
+          if (Number.isFinite(value)) painted *= value
+        }
+        if (painted > 0.05) opacity = painted
+        break
+      }
+    }
+  }
   const visibleLeft = Math.max(rect.left, clipLeft)
   const visibleTop = Math.max(rect.top, clipTop)
   const visibleRight = Math.min(rect.right, clipRight)

@@ -519,6 +519,39 @@ describe('a styled checkbox or radio', () => {
 })
 
 describe('a searchable dropdown', () => {
+  /** ADP's MDFSelectBox, a react-select: the text input is transparent inside the control a person sees. */
+  function selectBox(extra = ''): Element {
+    // Live ADP WorkforceNow "Country" field, 2026-11-27 20:58: the input scored opacity 0, the arrow ariaHidden 0.
+    mount('<div id="control" class="MDFSelectBox__control"><div id="value" class="MDFSelectBox__value-container">'
+      + '<div id="sizer" class="MDFSelectBox__input-container"><input id="country" class="MDFSelectBox__input" type="text"'
+      + ' role="combobox" aria-autocomplete="list" aria-expanded="false" aria-haspopup="true" style="opacity:0"></div></div>'
+      + `<div class="MDFSelectBox__indicators"><div aria-hidden="true">v</div></div>${extra}</div>`)
+    const input = find('#country')
+    layout
+      .place(input, { left: 100, top: 100, width: 2, height: 20 })
+      .place(find('#sizer'), { left: 100, top: 100, width: 2, height: 20 })
+      .place(find('#value'), { left: 90, top: 95, width: 170, height: 30 })
+      .place(find('#control'), { left: 90, top: 95, width: 200, height: 30 })
+      .paint(input)
+    return input
+  }
+
+  it('measures a transparent combobox input by the control a person sees, ignoring the hidden value input', () => {
+    const input = selectBox('<input type="hidden" name="country" value="">')
+    const facts = probeElement(input)
+    expect(facts.opacity).toBe(1)
+    expect(scoreVisibility(readElementFacts(facts)).factors.opacity).toBe(1)
+  })
+
+  it('keeps a transparent combobox input transparent in a faded control or in a box with another control', () => {
+    const faded = selectBox()
+    find('#control').setAttribute('style', 'opacity:0')
+    expect(probeElement(faded).opacity).toBe(0)
+    mount('<div id="box"><input id="decoy" role="combobox" style="opacity:0"><button>Go</button></div>')
+    layout.place(find('#decoy'), { left: 100, top: 100, width: 2, height: 20 }).place(find('#box'), { left: 90, top: 95, width: 200, height: 30 })
+    expect(probeElement(find('#decoy')).opacity).toBe(0)
+  })
+
   it('aims a caret-wide combobox input at the control that holds it', () => {
     mount('<div id="control"><div id="sizer"><input id="city" aria-autocomplete="list"></div></div>')
     const input = find('#city')
