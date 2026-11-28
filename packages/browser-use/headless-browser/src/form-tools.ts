@@ -148,7 +148,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps, register = r
       files: { type: 'array', items: { type: 'string' }, required: true, description: 'Absolute paths, or bare file names in the first upload directory.' },
       selector: { type: 'string', description: 'CSS selector of the input[type=file]; e.g. input[type=file] or #resume-upload input[type=file].' },
       index: { type: 'integer', description: 'Which matching file input, counting from 0 in document order; 0 when omitted.' },
-      trigger: { type: 'string', description: 'CSS selector of the visible button that opens the file chooser, instead of selector.' },
+      trigger: { type: 'string', description: 'CSS selector of the visible button that opens the file chooser, instead of selector; a trigger that names the file input itself (by its label) attaches to that input.' },
       triggerAxId: { type: 'string', description: 'Accessibility id of that button, instead of trigger.' },
       tab: { type: 'string', description: 'Tab id; the active tab when omitted.' },
     },

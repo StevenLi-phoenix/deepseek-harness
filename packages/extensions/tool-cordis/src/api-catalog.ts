@@ -3288,6 +3288,57 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'notifyLearning',
+    summary: 'The learner of notification rules.',
+    description: 'The learner of notification rules.',
+    methods: [
+      {
+        signature: 'observe(session: Session, event: SessionEvent): void',
+        description: 'Take one committed Session event; nothing while learning is off.',
+        parameters: [{ name: 'session', description: 'the Session.' }, { name: 'event', description: 'the event.' }],
+      },
+      {
+        signature: 'async rules(): Promise<{ revision: number; rules: readonly Rule[] }>',
+        description: 'The rules, newest first, and their revision.',
+        parameters: [],
+        returns: 'them.',
+        throws: ['when `rules.json` is damaged.'],
+      },
+      {
+        signature: 'async block(tools: boolean): Promise<RulesBlock | undefined>',
+        description: 'The rules block for a proactive turn.',
+        parameters: [{ name: 'tools', description: 'whether the Session has the rule tools.' }],
+        returns: 'the block; undefined while learning is off or no rule exists.',
+        throws: ['when `rules.json` is damaged.'],
+      },
+      {
+        signature: 'async forget(id: string): Promise<Rule | undefined>',
+        description: 'Delete one rule; the owner asked for it.',
+        parameters: [{ name: 'id', description: 'the rule\'s id.' }],
+        returns: 'the deleted rule, or undefined when no rule has the id.',
+      },
+      {
+        signature: 'async runIfDue(now: Date = new Date()): Promise<PassReport | undefined>',
+        description: 'Run the day\'s pass when it is due: learning is on, the local hour has come, no pass finished today, and fewer than three passes failed today, the last one more than an hour ago.',
+        parameters: [{ name: 'now', description: 'the time.' }],
+        returns: 'the report, or undefined when nothing was due.',
+      },
+      {
+        signature: 'run(now: Date = new Date()): Promise<PassReport>',
+        description: 'Run one pass now, whatever the hour.',
+        parameters: [{ name: 'now', description: 'the time.' }],
+        returns: 'what it did.',
+        throws: ['when the model call fails or its answer is not the JSON asked for; the exchanges stay for the next try.'],
+      },
+      {
+        signature: 'async dispose(): Promise<void>',
+        description: 'Stop a running pass\'s model call and wait for it and for every queued write.',
+        parameters: [],
+        returns: 'resolves once all of it settled.',
+      },
+    ],
+  },
+  {
     key: 'officeKit',
     summary: 'A provider lifetime owns all converters, queued calls, and temporary files.',
     description: 'A provider lifetime owns all converters, queued calls, and temporary files.',
@@ -10246,6 +10297,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PaneOpenResult {\n    id: string;\n    isPlaced: boolean;\n    reason?: string;\n}',
   },
   {
+    name: 'PassReport',
+    declaration: 'export type PassReport = {\n    readonly outcome: \'nothing\';\n    readonly dropped: number;\n} | {\n    readonly outcome: \'learned\';\n    readonly read: number;\n    readonly dropped: number;\n    readonly accepted: number;\n    readonly rejected: readonly RejectedSignal[];\n    readonly added: readonly Rule[];\n    readonly removed: readonly Rule[];\n    readonly model: string;\n};',
+  },
+  {
     name: 'PatchHunk',
     declaration: 'export interface PatchHunk {\n    lineNumber: number;\n    context?: string;\n    oldLines: string[];\n    newLines: string[];\n    isEndOfFile: boolean;\n}',
   },
@@ -10722,6 +10777,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RegistryAttempt {\n    readonly registry: Registry;\n    readonly problem?: \'not-found\' | \'network\' | \'unknown\';\n    readonly reason?: string;\n}',
   },
   {
+    name: 'RejectedSignal',
+    declaration: 'export interface RejectedSignal {\n    readonly index: number;\n    readonly why: \'invalid\' | \'unknown_exchange\' | \'empty\' | \'kind_too_long\' | \'quote_too_long\' | \'quote_not_owner\' | \'duplicate\';\n}',
+  },
+  {
     name: 'RelayAnswer',
     declaration: 'export interface RelayAnswer {\n    readonly sessionId: string;\n    readonly text: string;\n    readonly outcome: string;\n    readonly detail?: string | undefined;\n    readonly parts?: readonly string[] | undefined;\n}',
   },
@@ -10988,6 +11047,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RRuleScheduleRecord',
     declaration: 'export interface RRuleScheduleRecord {\n    readonly kind: \'rrule\';\n    readonly id: ScheduleId;\n    readonly title: string;\n    readonly prompt: string;\n    readonly rrule: string;\n    readonly scheduledAt: string;\n}',
+  },
+  {
+    name: 'Rule',
+    declaration: 'export type Rule = z.infer<typeof ruleSchema>;',
+  },
+  {
+    name: 'RulesBlock',
+    declaration: 'export interface RulesBlock {\n    readonly revision: number;\n    readonly text: string;\n}',
   },
   {
     name: 'RunnerFailureRule',

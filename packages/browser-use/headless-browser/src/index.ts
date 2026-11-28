@@ -40,6 +40,8 @@ declare module '@deepseek-ai/cordis' {
     /** Trusted current-tab context for the verification-code tool in the job-apply scope. */
     jobApplyBrowser: {
       currentHost(sessionId: string, signal?: AbortSignal): Promise<string | null>
+      /** Link hostnames of the caller's current job page, for an ATS page that vouches for its employer's mail domain. */
+      linkedHosts(sessionId: string, signal?: AbortSignal): Promise<readonly string[]>
       registrableDomain(host: string): string | null
     }
   }

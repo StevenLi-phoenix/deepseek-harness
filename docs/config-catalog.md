@@ -3623,6 +3623,67 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-message-feedback -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-notify-learning -->
+<a id="deepseek-aidsh-notify-learning"></a>
+
+## `@deepseek-ai/dsh-notify-learning`
+
+- `source`: [`packages/fork/notify-learning/src/index.ts:60`](../packages/fork/notify-learning/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /**
+   * `learn` (at the root): the capture, the nightly pass, the rules block, `ctx.notifyLearning`.
+   * `tools` (inside a preset): the rule tools.
+   */
+  mode: 'learn' | 'tools'
+  /** Learn mode: `false` stops the capture and the passes and keeps the rules out of every prompt; the files stay. */
+  enabled: boolean
+  /** Learn mode: directory of `exchanges.json`, `rules.json`, `history.jsonl`, `raw/`; defaults to `<DSH_HOME>/notify-learning`. */
+  dir?: string
+  /** Learn mode: owner relay channel whose Sessions' answers reach the owner. */
+  channel: string
+  /** Learn mode: agent presets whose proactive turns get the rules block. */
+  presets: string[]
+  /** Learn mode: presets among `presets` that mount the tools row, so their block names the tools. */
+  toolPresets: string[]
+  /** Learn mode: IANA zone of the pass's day and hour and of the notice's dates. */
+  timeZone: string
+  /** Learn mode: local hour at or after which the day's pass runs. */
+  hour: number
+  /** Learn mode: hours after a message during which the owner's turns count as reactions to it. */
+  windowHours: number
+  /** Learn mode: owner turns kept per message. */
+  maxReplies: number
+  /** Learn mode: messages kept open at most. */
+  maxExchanges: number
+  /** Learn mode: messages one pass reads at most. */
+  maxBatch: number
+  /** Learn mode: different exchanges that must agree before a rule is learned. */
+  minExchanges: number
+  /** Learn mode: days a reaction counts toward a rule. */
+  clueDays: number
+  /** Learn mode: rules kept at most. */
+  maxRules: number
+  /** Learn mode: clues kept at most. */
+  maxClues: number
+  /** Learn mode: owner quotes kept per rule. */
+  maxEvidence: number
+  /** Learn mode: tell the owner what a pass changed. */
+  notify: boolean
+  /** Learn mode: provider of the pass's model call; with `model`, replaces the profile's default route. */
+  provider?: string
+  /** Learn mode: model of the pass's call. */
+  model?: string
+  /** Learn mode: output tokens of the pass's call at most. */
+  maxOutputTokens: number
+  /** Learn mode: raw model answers kept. */
+  rawKept: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-notify-learning -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-notion -->
 <a id="deepseek-aidsh-notion"></a>
 

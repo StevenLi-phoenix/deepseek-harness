@@ -71,8 +71,12 @@ export class TabNotFoundError extends Error {
 
 /** The browser is at its tab cap; the caller must close one first. */
 export class TabLimitError extends Error {
-  constructor(max: number) {
-    super(`the browser allows at most ${max} tabs; close one with headless_browser_close before opening another`)
+  /**
+   * @param max - the tab cap.
+   * @param advice - what the caller should do instead of closing one of its own tabs.
+   */
+  constructor(max: number, advice = 'close one with headless_browser_close before opening another') {
+    super(`the browser allows at most ${max} tabs; ${advice}`)
     this.name = 'TabLimitError'
   }
 }
@@ -122,7 +126,7 @@ export interface TabsOptions<Page extends TabsPage = TabsPage> {
    * Called for every page the manager adopts; the returned function runs when
    * the tab lets the page go. The session uses it to keep the page's downloads.
    */
-  readonly onAdopt?: (page: Page, owner: string | null) => () => void
+  readonly onAdopt?: (page: Page, owner: string | null, id: string) => () => void
   /** Protect a popup before exposing it; returns its inherited owner, if any. */
   readonly preparePopup?: (page: Page, owner: string | null) => Promise<string | undefined>
   /** Stable IDs must not be reused after a browser restart when the ledger is enabled. */
@@ -331,6 +335,21 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   owner(id: string): string | null | undefined {
     const tab = this.#tabs.get(id)
     return tab === undefined || tab.page.isClosed() ? undefined : tab.openedBySessionId
+  }
+
+  /**
+   * Hand a live tab to another owner; the caller decides who may take it.
+   * @param id - live tab id.
+   * @param owner - the new trusted owner.
+   * @returns whether the tab was live and changed hands.
+   */
+  setOwner(id: string, owner: string): boolean {
+    const tab = this.#tabs.get(id)
+    if (tab === undefined || tab.page.isClosed()) return false
+    tab.openedBySessionId = owner
+    this.#options.store?.see(tab)
+    this.#emit()
+    return true
   }
 
   /**
@@ -631,7 +650,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     page.on('framenavigated', onNavigation)
     page.on('close', onClose)
     page.on('popup', onPopup)
-    const detachAdopt = this.#options.onAdopt?.(page, openedBySessionId)
+    const detachAdopt = this.#options.onAdopt?.(page, openedBySessionId, id)
     tab.detach = () => {
       detachAdopt?.()
       page.off('domcontentloaded', onLoad)

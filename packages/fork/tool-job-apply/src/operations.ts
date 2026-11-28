@@ -18,6 +18,18 @@ const ISSUE_THREAD = ISSUE.extend({ comments: z.array(COMMENT) })
 const MAX_COMMENTS = 20
 const TRACKER_BASE = 'https://mcp.lishuyu.app/api/jobtracker/'
 const TRACKER_MAX_RESPONSE = 50_000
+// A list without a status reads every row (about 1 KB each), so it gets a larger read cap than a write.
+const TRACKER_LIST_MAX_RESPONSE = 8_000_000
+const LIST_MAX_ROWS = 40
+const LIST_FULL_NOTES = 5
+const LIST_NOTE_CHARS = 300
+const TRACKER_ROW = z.object({
+  id: z.string(), status: z.string(), company: z.string(), role: z.string(),
+  url: z.string().nullish(), location: z.string().nullish(), source: z.string().nullish(),
+  date_applied: z.string().nullish(), deadline: z.string().nullish(), notes: z.string().nullish(), updated_at: z.string().nullish(),
+})
+type TrackerRow = z.infer<typeof TRACKER_ROW>
+const TRACKER_LIST = z.union([z.array(TRACKER_ROW), z.object({ result: z.array(TRACKER_ROW) }).transform(value => value.result)])
 const TRACKING_PARAM = /^(?:utm_.*|gh_src|ref|src|source|lever-source|lever-origin|trk|trackingid|refid)$/iu
 
 interface TrackerArguments {
@@ -81,8 +93,10 @@ export function trackerCall(args: TrackerArguments): ['add_application' | 'updat
   return [args.operation === 'append' ? 'add_application' : 'update_application', JSON.stringify(body)]
 }
 
-async function trackerResponse(response: Response): Promise<string> {
-  if (response.body === null) throw new Error('Jobtracker returned no response body.')
+class TrackerResponseError extends Error {}
+
+async function trackerResponse(response: Response, limit: number): Promise<string> {
+  if (response.body === null) throw new TrackerResponseError('Jobtracker returned no response body.')
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let bytes = 0
@@ -92,9 +106,9 @@ async function trackerResponse(response: Response): Promise<string> {
       const chunk = await reader.read()
       if (chunk.done) return result + decoder.decode()
       bytes += chunk.value.byteLength
-      if (bytes > TRACKER_MAX_RESPONSE) {
+      if (bytes > limit) {
         await reader.cancel()
-        throw new Error('Jobtracker response exceeded the size limit.')
+        throw new TrackerResponseError('Jobtracker response exceeded the size limit.')
       }
       result += decoder.decode(chunk.value, { stream: true })
     }
@@ -118,37 +132,119 @@ export async function writeTrackerRow(
   return callTracker(endpoint, body, token, signal, request)
 }
 
+/** Optional list filters; company, role and URL search every status. */
+export interface TrackerFilter {
+  status?: string | undefined
+  company?: string | undefined
+  role?: string | undefined
+  url?: string | undefined
+}
+
+/** Lowercase letters and digits only, so "TikTok Inc." matches "tiktok" and "Software-Engineer" matches "software engineer". */
+function fold(value: string | null | undefined): string {
+  return (value ?? '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+/** Host without www plus path without a trailing slash, the part two copies of a posting link share. */
+function urlKey(value: string | null | undefined): string {
+  const parsed = URL.parse(value ?? '')
+  if (parsed === null) return fold(value)
+  return `${parsed.hostname.replace(/^www\./u, '')}${parsed.pathname.replace(/\/$/u, '')}`.toLowerCase()
+}
+
+/** Either side contains the other, so a role with or without its requisition number still matches. */
+function overlaps(stored: string, wanted: string): boolean {
+  return stored !== '' && wanted !== '' && (stored.includes(wanted) || wanted.includes(stored))
+}
+
+function compactRow(row: TrackerRow, fullNotes: boolean): Record<string, string | null | undefined> {
+  const notes = row.notes ?? ''
+  return {
+    id: row.id, status: row.status, company: row.company, role: row.role, url: row.url, location: row.location, source: row.source,
+    date_applied: row.date_applied, deadline: row.deadline, updated_at: row.updated_at,
+    notes: fullNotes || notes.length <= LIST_NOTE_CHARS ? notes : `${notes.slice(0, 100)} … ${notes.slice(-(LIST_NOTE_CHARS - 100))}`,
+  }
+}
+
 /**
- * List tracker rows using only the optional status filter supported by the tracker.
- * @param status A known tracker status, or omission to list without a filter.
+ * List tracker rows. A company, role or URL filter reads every status and matches ignoring case and punctuation;
+ * otherwise the tracker filters by status. Output is bounded: at most 40 rows, with full notes only when 5 or fewer match.
+ * @param filter Model-supplied filters, fillers already removed.
  * @param token Service-provisioned token.
  * @param signal Cancellation from tool execution.
  * @param request HTTP transport.
- * @returns Bounded response text without the supplied bearer token.
+ * @returns JSON text without the supplied bearer token.
  */
 export async function listTrackerRows(
-  status: string | undefined, token: string | undefined, signal: AbortSignal, request = fetch,
+  filter: TrackerFilter, token: string | undefined, signal: AbortSignal, request = fetch,
 ): Promise<string> {
+  const { status } = filter
   if (status !== undefined && !STATUSES.has(status)) throw new Error('Unsupported tracker status.')
-  return callTracker('list_applications', JSON.stringify({ status }), token, signal, request)
+  // Filters are only compared locally and never sent, so they need bounds, not the write-side injection checks.
+  const bounded = (value: string | undefined, field: string): string | undefined => {
+    if (value === undefined) return undefined
+    if (Buffer.byteLength(value) > 2048 || /[\p{Cc}\p{Cf}]/u.test(value)) throw new Error(`The ${field} filter must be plain text up to 2048 bytes.`)
+    return value
+  }
+  const company = bounded(filter.company, 'company') === undefined ? undefined : fold(filter.company)
+  const role = bounded(filter.role, 'role') === undefined ? undefined : fold(filter.role)
+  const url = bounded(filter.url, 'url') === undefined ? undefined : urlKey(filter.url)
+  const search = company !== undefined || role !== undefined || url !== undefined
+  const body = JSON.stringify(search || status === undefined ? {} : { status })
+  const text = await callTracker('list_applications', body, token, signal, request, TRACKER_LIST_MAX_RESPONSE)
+  let rows: TrackerRow[]
+  try {
+    rows = TRACKER_LIST.parse(JSON.parse(text))
+  } catch {
+    throw new Error('Jobtracker returned an unexpected list response.')
+  }
+  let matched = rows
+  let fallback: string | undefined
+  if (search) {
+    const byCompany = company === undefined ? rows : rows.filter(row => overlaps(fold(row.company), company))
+    const roleMatches = (row: TrackerRow) => role === undefined || overlaps(fold(row.role), role)
+    matched = byCompany.filter(row => roleMatches(row) && (url === undefined || urlKey(row.url) === url))
+    if (matched.length === 0 && company !== undefined && byCompany.length > 0) {
+      matched = byCompany
+      fallback = 'No row matched the role or URL; these are every row for the company.'
+    }
+  }
+  const shown = matched.slice(0, LIST_MAX_ROWS)
+  const fullNotes = matched.length <= LIST_FULL_NOTES
+  return JSON.stringify({
+    filter: search ? { company: filter.company, role: filter.role, url: filter.url, statuses: 'all' } : { status: status ?? 'all' },
+    matched: matched.length,
+    ...(fallback === undefined ? {} : { note: fallback }),
+    ...(matched.length > shown.length ? { omitted: matched.length - shown.length, hint: 'Newest first; add company, role or url to narrow.' } : {}),
+    ...(fullNotes ? {} : {
+      notes: `Notes are shortened when more than ${LIST_FULL_NOTES} rows match; list by company and role to read a row's full notes before an update.`,
+    }),
+    rows: shown.map(row => compactRow(row, fullNotes)),
+  })
 }
 
-async function callTracker(endpoint: 'add_application' | 'update_application' | 'list_applications', body: string, token: string | undefined, signal: AbortSignal, request: typeof fetch): Promise<string> {
+async function callTracker(
+  endpoint: 'add_application' | 'update_application' | 'list_applications', body: string, token: string | undefined, signal: AbortSignal,
+  request: typeof fetch, limit = TRACKER_MAX_RESPONSE,
+): Promise<string> {
   if (token === undefined || !token.trim()) throw new Error('Jobtracker requires JOBTRACKER_PAT in the service environment.')
   signal.throwIfAborted()
+  const write = endpoint !== 'list_applications'
+  const unsure = write ? '; do not assume the write landed.' : '.'
   try {
     const response = await request(`${TRACKER_BASE}${endpoint}`, {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       redirect: 'error', body, signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
     })
-    if (response.status === 200) return (await trackerResponse(response)).replaceAll(token, '[redacted]')
+    if (response.status === 200) return (await trackerResponse(response, limit)).replaceAll(token, '[redacted]')
     await response.body?.cancel()
-  } catch (_error) {
-    // Fetch errors can retain the entire request, including the authorization header.
+  } catch (error) {
+    // Fetch errors can retain the entire request, including the authorization header, so only our own messages pass.
     signal.throwIfAborted()
-    throw new Error('The fixed jobtracker request did not complete; do not assume the write landed.')
+    if (error instanceof TrackerResponseError) throw new Error(`${error.message.replace(/\.$/u, '')}${unsure}`)
+    throw new Error(`The fixed jobtracker request did not complete${unsure}`)
   }
-  throw new Error('Jobtracker returned an unsuccessful HTTP response; do not assume the write landed.')
+  throw new Error(`Jobtracker returned an unsuccessful HTTP response${unsure}`)
 }
 
 function issueMarker(kind: string, ref: string): string {

@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleAim, findToggleStandIn, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
 
 /** A box in viewport CSS pixels. */
 interface Box {
@@ -519,6 +519,39 @@ describe('a styled checkbox or radio', () => {
 })
 
 describe('a searchable dropdown', () => {
+  /** ADP's MDFSelectBox, a react-select: the text input is transparent inside the control a person sees. */
+  function selectBox(extra = ''): Element {
+    // Live ADP WorkforceNow "Country" field, 2026-11-27 20:58: the input scored opacity 0, the arrow ariaHidden 0.
+    mount('<div id="control" class="MDFSelectBox__control"><div id="value" class="MDFSelectBox__value-container">'
+      + '<div id="sizer" class="MDFSelectBox__input-container"><input id="country" class="MDFSelectBox__input" type="text"'
+      + ' role="combobox" aria-autocomplete="list" aria-expanded="false" aria-haspopup="true" style="opacity:0"></div></div>'
+      + `<div class="MDFSelectBox__indicators"><div aria-hidden="true">v</div></div>${extra}</div>`)
+    const input = find('#country')
+    layout
+      .place(input, { left: 100, top: 100, width: 2, height: 20 })
+      .place(find('#sizer'), { left: 100, top: 100, width: 2, height: 20 })
+      .place(find('#value'), { left: 90, top: 95, width: 170, height: 30 })
+      .place(find('#control'), { left: 90, top: 95, width: 200, height: 30 })
+      .paint(input)
+    return input
+  }
+
+  it('measures a transparent combobox input by the control a person sees, ignoring the hidden value input', () => {
+    const input = selectBox('<input type="hidden" name="country" value="">')
+    const facts = probeElement(input)
+    expect(facts.opacity).toBe(1)
+    expect(scoreVisibility(readElementFacts(facts)).factors.opacity).toBe(1)
+  })
+
+  it('keeps a transparent combobox input transparent in a faded control or in a box with another control', () => {
+    const faded = selectBox()
+    find('#control').setAttribute('style', 'opacity:0')
+    expect(probeElement(faded).opacity).toBe(0)
+    mount('<div id="box"><input id="decoy" role="combobox" style="opacity:0"><button>Go</button></div>')
+    layout.place(find('#decoy'), { left: 100, top: 100, width: 2, height: 20 }).place(find('#box'), { left: 90, top: 95, width: 200, height: 30 })
+    expect(probeElement(find('#decoy')).opacity).toBe(0)
+  })
+
   it('aims a caret-wide combobox input at the control that holds it', () => {
     mount('<div id="control"><div id="sizer"><input id="city" aria-autocomplete="list"></div></div>')
     const input = find('#city')
@@ -616,6 +649,38 @@ describe('the box that stands in for a checkbox or radio the page hides', () => 
     expect(findToggleStandIn(find('#decoy'))).toBeNull()
     expect(findToggleStandIn(find('#unlabelled'))).toBeNull()
     expect(findToggleStandIn(find('#email'))).toBeNull()
+  })
+
+  /** D. E. Shaw's privacy acknowledgment: a click-through label whose paragraph lies over the native box. */
+  function clickThroughLabel(): void {
+    // Live apply.deshaw.com step 1, 2026-11-27: input and label scored pointerEvents 0; the <p> covered the input.
+    mount('<div class="confirmation-HTML checkbox-list"><label id="label" class="checkbox-root-label" style="pointer-events:none">'
+      + '<span id="box"><input type="checkbox" id="confirm" name="Confirm" aria-required="true"></span>'
+      + '<p id="text" style="pointer-events:auto">Click the checkbox to indicate your acknowledgment and acceptance of the '
+      + '<a id="notice" href="https://www.example.com/privacy">Privacy Notice</a></p></label></div>')
+    layout.place(find('#confirm'), { left: 0, top: 0, width: 16, height: 16 })
+      .place(find('#text'), { left: 0, top: 0, width: 400, height: 40 })
+      .place(find('#label'), { left: 0, top: 0, width: 400, height: 40 })
+  }
+
+  it('takes the part of a click-through label over the box, for the box or its label, and aims at the box', () => {
+    clickThroughLabel()
+    layout.place(find('#notice'), { left: 300, top: 20, width: 90, height: 16 }).paint(find('#notice'), find('#text'), find('#confirm'))
+    expect(findToggleStandIn(find('#confirm'))).toBe(find('#text'))
+    expect(findToggleStandIn(find('#label'))).toBe(find('#text'))
+    expect(findToggleAim(find('#confirm'))).toEqual({ x: 8, y: 8 })
+    expect(findToggleAim(find('#label'))).toEqual({ x: 8, y: 8 })
+  })
+
+  it('finds no part when a link inside the label lies over the box, and no aim for a painted label', () => {
+    clickThroughLabel()
+    layout.place(find('#notice'), { left: 0, top: 0, width: 16, height: 16 }).paint(find('#notice'), find('#text'), find('#confirm'))
+    expect(findToggleStandIn(find('#confirm'))).toBeNull()
+    expect(findToggleAim(find('#confirm'))).toBeNull()
+    mount('<input type="radio" id="resume" name="resume"><label id="name" for="resume">Shuyu_Li_Resume.pdf</label>')
+    layout.place(find('#resume'), { left: 0, top: 0, width: 16, height: 16 }).place(find('#name'), { left: 20, top: 0, width: 200, height: 20 })
+    expect(findToggleStandIn(find('#name'))).toBeNull()
+    expect(findToggleAim(find('#resume'))).toBeNull()
   })
 })
 

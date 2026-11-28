@@ -2,7 +2,7 @@
 
 [English](fork.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-event-bus`](../../packages/fork/event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-github-sensor`](../../packages/fork/github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-wechat`](../../packages/fork/wechat/README.zh.md) 通过微信提供 `ownerNotifier` 契约，[`@deepseek-ai/dsh-qq`](../../packages/fork/qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-qq-login`](../../packages/fork/qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-speaking-style`](../../packages/fork/speaking-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-speaking-style-settings`](../../packages/fork/speaking-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号，[`@deepseek-ai/dsh-courses`](../../packages/fork/courses/README.zh.md) 按 courses 服务里的记录、用固定规则提醒主人课程 DDL（它的设置 → 课程 DDL 页是 [`@deepseek-ai/dsh-courses-settings`](../../packages/fork/courses-settings/README.zh.md)），[`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.zh.md) 管理主人的 Gmail 账号，以及把主人没确认的信留成草稿的发信关卡（它的设置 → 邮箱 页是 [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.zh.md)），[`@deepseek-ai/dsh-subagent-activity`](../../packages/fork/subagent-activity/README.zh.md) 在顶栏打开的右侧栏页面里列出一个会话的子智能体和它们此刻在做什么。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-event-bus`](../../packages/fork/event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-github-sensor`](../../packages/fork/github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-wechat`](../../packages/fork/wechat/README.zh.md) 通过微信提供 `ownerNotifier` 契约，[`@deepseek-ai/dsh-qq`](../../packages/fork/qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-qq-login`](../../packages/fork/qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-speaking-style`](../../packages/fork/speaking-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-speaking-style-settings`](../../packages/fork/speaking-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号，[`@deepseek-ai/dsh-courses`](../../packages/fork/courses/README.zh.md) 按 courses 服务里的记录、用固定规则提醒主人课程 DDL（它的设置 → 课程 DDL 页是 [`@deepseek-ai/dsh-courses-settings`](../../packages/fork/courses-settings/README.zh.md)），[`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.zh.md) 管理主人的 Gmail 账号，以及把主人没确认的信留成草稿的发信关卡（它的设置 → 邮箱 页是 [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.zh.md)），[`@deepseek-ai/dsh-subagent-activity`](../../packages/fork/subagent-activity/README.zh.md) 在顶栏打开的右侧栏页面里列出一个会话的子智能体和它们此刻在做什么，[`@deepseek-ai/dsh-notify-learning`](../../packages/fork/notify-learning/README.zh.md) 从 owner 在微信上的回复里学到每类主动消息该怎么送到他面前，并在不是 owner 开启的回合之前给出这些规则。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -717,6 +717,69 @@ async held(): Promise<PendingRecord[]>
 Types: [AccountView](account.zh.md)
 
 Source: [`packages/fork/gmail/src/index.ts`](../../packages/fork/gmail/src/index.ts)
+
+<a id="ctxnotifylearning--notifylearning"></a>
+
+### `ctx.notifyLearning` — `NotifyLearning`
+
+The learner of notification rules.
+
+```ts cordis-catalog
+/**
+ * Take one committed Session event; nothing while learning is off.
+ * @param session - the Session.
+ * @param event - the event.
+ */
+observe(session: Session, event: SessionEvent): void
+
+/**
+ * The rules, newest first, and their revision.
+ * @returns them.
+ * @throws when `rules.json` is damaged.
+ */
+async rules(): Promise<{ revision: number; rules: readonly Rule[] }>
+
+/**
+ * The rules block for a proactive turn.
+ * @param tools - whether the Session has the rule tools.
+ * @returns the block; undefined while learning is off or no rule exists.
+ * @throws when `rules.json` is damaged.
+ */
+async block(tools: boolean): Promise<RulesBlock | undefined>
+
+/**
+ * Delete one rule; the owner asked for it.
+ * @param id - the rule's id.
+ * @returns the deleted rule, or undefined when no rule has the id.
+ */
+async forget(id: string): Promise<Rule | undefined>
+
+/**
+ * Run the day's pass when it is due: learning is on, the local hour has come, no pass finished today, and fewer than
+ * three passes failed today, the last one more than an hour ago.
+ * @param now - the time.
+ * @returns the report, or undefined when nothing was due.
+ */
+async runIfDue(now: Date = new Date()): Promise<PassReport | undefined>
+
+/**
+ * Run one pass now, whatever the hour.
+ * @param now - the time.
+ * @returns what it did.
+ * @throws when the model call fails or its answer is not the JSON asked for; the exchanges stay for the next try.
+ */
+run(now: Date = new Date()): Promise<PassReport>
+
+/**
+ * Stop a running pass's model call and wait for it and for every queued write.
+ * @returns resolves once all of it settled.
+ */
+async dispose(): Promise<void>
+```
+
+Types: [Session](session.zh.md) · [SessionEvent](session.zh.md)
+
+Source: [`packages/fork/notify-learning/src/service.ts`](../../packages/fork/notify-learning/src/service.ts)
 
 <a id="ctxownernotifier--ownernotifier"></a>
 

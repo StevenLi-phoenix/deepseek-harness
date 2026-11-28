@@ -13,7 +13,7 @@ const MISMATCH = { ...NO_CODE, error: 'domain_mismatch' }
 const ARGS = { account: 'work', sender_domain: 'Mail.Example.CO.UK.' }
 const SESSION = openTurn([], [], 'job-session')
 
-async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrowser = true, mode: ToolGmail.Config['mode'] = 'verification-only') {
+async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrowser = true, mode: ToolGmail.Config['mode'] = 'verification-only', links: string[] = []) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
@@ -25,6 +25,7 @@ async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrow
     held: vi.fn(), search: vi.fn(), thread: vi.fn(), message: vi.fn(), download: vi.fn(),
   }
   const currentHost = vi.fn(async (_id: string, _signal?: AbortSignal) => host)
+  const linkedHosts = vi.fn(async (_id: string, _signal?: AbortSignal): Promise<readonly string[]> => links)
   // This is a deliberately small fixture, not a replacement PSL implementation.
   const registrableDomain = vi.fn((value: string) => {
     const labels = value.split('.')
@@ -35,14 +36,14 @@ async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrow
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
   ctx.provide('gmail', gmail as never)
-  if (provideBrowser) ctx.provide('jobApplyBrowser', { currentHost, registrableDomain })
+  if (provideBrowser) ctx.provide('jobApplyBrowser', { currentHost, linkedHosts, registrableDomain })
   await ctx.plugin(ToolGmail, { timeZone: 'UTC', mode })
   const invoke = async (args: Record<string, unknown>, withAgent = true, signal = new AbortController().signal) => {
     const tool = ctx.tools.get('gmail_verification_code')!
     const value = await tool.execute(args, { agent: withAgent ? { session: SESSION } : undefined, signal } as never)
     return { value, content: tool.output.render(args, value as JsonValue) }
   }
-  return { ctx, gmail, logs, currentHost, registrableDomain, invoke }
+  return { ctx, gmail, logs, currentHost, linkedHosts, registrableDomain, invoke }
 }
 
 afterEach(async () => {
@@ -90,7 +91,7 @@ describe('verification-only mode', () => {
     }
   })
 
-  it.each([[99_999, 1440], [-50, 1], [5, 5]])('clamps %i minutes to %i', async (lookback_minutes, clamped) => {
+  it.each([[99_999, 1440], [-50, 1], [5, 5], [0, 30]])('clamps %i minutes to %i', async (lookback_minutes, clamped) => {
     const h = await mount()
     h.gmail.verificationCode.mockResolvedValue(null)
     expect((await h.invoke({ ...ARGS, lookback_minutes })).value).toEqual(NO_CODE)
@@ -101,6 +102,7 @@ describe('verification-only mode', () => {
   it.each([
     ['tenant.wd1.myworkdayjobs.com', 'workday.com'],
     ['workday.com', 'myworkdayjobs.com'],
+    ['tenant.wd5.myworkdayjobs.com', 'myworkday.com'],
     ['boards.greenhouse.io', 'eu.greenhouse-mail.io'],
   ])('allows the pinned vendor pair %s and %s', async (host, sender_domain) => {
     const h = await mount(host)
@@ -112,6 +114,7 @@ describe('verification-only mode', () => {
     ['tenant.wd1.myworkdayjobs.com', 'employer.example'],
     ['tenant.wd1.myworkdayjobs.com', 'notworkday.com'],
     ['tenant.wd1.myworkdayjobs.com', 'workday.com.example'],
+    ['tenant.wd1.myworkdayjobs.com', 'notmyworkday.com'],
     ['careers.example.co.uk', 'other.co.uk'],
     ['careers.example.co.uk', 'https://example.co.uk'],
     ['careers.example.co.uk', 'example.co.uk -in:inbox'],
@@ -133,6 +136,87 @@ describe('verification-only mode', () => {
     expect((await h.invoke({ ...ARGS, sender_domain: domain })).value).toEqual({ ...NO_CODE, error: 'sensitive_sender' })
     expect(h.gmail.verificationCode).not.toHaveBeenCalled()
     expect(h.logs).toEqual(['tool-gmail: gmail_verification_code sensitive_sender'])
+  })
+
+  it('searches every domain of a pinned vendor and returns the newest proof', async () => {
+    const h = await mount('pipersandler.wd501.myworkdayjobs.com')
+    const asked: string[] = []
+    h.gmail.verificationCode.mockImplementation(async (_account, lookup) => {
+      asked.push(lookup.domain)
+      if (lookup.domain === 'workday.com') return { ...RESULT, domain: 'workday.com', receivedAt: RESULT.receivedAt + 60_000 }
+      if (lookup.domain === 'myworkday.com') return { ...RESULT, code: null, link: 'https://pipersandler.wd501.myworkdayjobs.com/verify', domain: 'myworkday.com' }
+      return null
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'myworkday.com' })).value).toMatchObject({ found: true, code: RESULT.code, from_domain: 'workday.com' })
+    expect(asked).toEqual(['myworkday.com', 'workday.com', 'myworkdayjobs.com'])
+    const plain = await mount()
+    await plain.invoke(ARGS)
+    expect(plain.gmail.verificationCode).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts an employer sender that the caller\'s Oracle page links to, with links back to that ATS', async () => {
+    const h = await mount('eodr.fa.us2.oraclecloud.com', true, 'verification-only', ['www.tenethealth.com', 'eodr.fa.us2.oraclecloud.com'])
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domain).toBe('tenethealth.com')
+      expect(lookup.allowsLinkHost('eodr.fa.us2.oraclecloud.com')).toBe(true)
+      expect(lookup.allowsLinkHost('careers.tenethealth.com')).toBe(true)
+      expect(lookup.allowsLinkHost('evil.example')).toBe(false)
+      return { ...RESULT, domain: 'tenethealth.com' }
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value).toMatchObject({ found: true, from_domain: 'tenethealth.com' })
+    expect(h.linkedHosts).toHaveBeenCalledWith('job-session', expect.anything())
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code sender %s vouched by the %s page')
+  })
+
+  it.each([
+    ['eodr.fa.us2.oraclecloud.com', 'linkedin.com', ['www.linkedin.com']],
+    ['eodr.fa.us2.oraclecloud.com', 'myworkday.com', ['www.myworkday.com']],
+    ['sagehr.my.salesforce-sites.com', 'salesforce.com', ['www.salesforce.com']],
+    ['tenant.wd1.myworkdayjobs.com', 'employer.example', ['www.employer.example']],
+    ['careers.example.co.uk', 'employer.example', ['www.employer.example']],
+    ['careers.qualcomm.com', 'onetrust.com', ['www.onetrust.com']],
+  ])('refuses on %s the sender %s that the page does not vouch for', async (host, sender_domain, links) => {
+    const h = await mount(host, true, 'verification-only', links)
+    expect((await h.invoke({ ...ARGS, sender_domain })).value).toEqual(MISMATCH)
+    expect(h.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('accepts the employer sender a Salesforce Site links to, as Sage mails from careers.sage.com', async () => {
+    // Live Sage fRecruit form, 2026-11-27 20:15: the worker asked for the ATS domain and found nothing.
+    const h = await mount('sagehr.my.salesforce-sites.com', true, 'verification-only', ['www.sage.com', 'www.sagepeople.com', 'www.linkedin.com'])
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domain).toBe('sage.com')
+      expect(lookup.domainOf('careers.sage.com')).toBe('sage.com')
+      return { ...RESULT, domain: 'sage.com' }
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'careers.sage.com' })).value).toMatchObject({ found: true, from_domain: 'sage.com' })
+  })
+
+  it('accepts the ATS vendor sender an employer careers site links to, as Qualcomm\'s Eightfold site mails from eightfold.ai', async () => {
+    // Live Qualcomm account verification at careers.qualcomm.com, 2026-11-27 22:23: the code came from confirm@eightfold.ai,
+    // and the site's footer links "Powered by eightfold.ai".
+    const h = await mount('careers.qualcomm.com', true, 'verification-only', ['www.qualcomm.com', 'careers.qualcomm.com', 'eightfold.ai', 'www.onetrust.com'])
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domain).toBe('eightfold.ai')
+      expect(lookup.allowsLinkHost('careers.qualcomm.com')).toBe(true)
+      expect(lookup.allowsLinkHost('app.eightfold.ai')).toBe(true)
+      expect(lookup.allowsLinkHost('evil.example')).toBe(false)
+      return { ...RESULT, domain: 'eightfold.ai' }
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toMatchObject({ found: true, from_domain: 'eightfold.ai' })
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code sender %s vouched by the %s page')
+    const bare = await mount('careers.qualcomm.com', true, 'verification-only', ['www.qualcomm.com'])
+    expect((await bare.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') })
+    expect(bare.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('tells the caller to open the posting page when no open Oracle page links to the employer sender', async () => {
+    // Tenet's application step at eodr.fa.us2.oraclecloud.com links only doleta.gov and uscis.gov (2026-11-27 20:14).
+    const h = await mount('eodr.fa.us2.oraclecloud.com', true, 'verification-only', ['www.doleta.gov', 'www.uscis.gov'])
+    const value = (await h.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value as Record<string, unknown>
+    expect(value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') })
+    expect(h.gmail.verificationCode).not.toHaveBeenCalled()
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code domain_mismatch: no open %s page links to %s')
   })
 
   it('returns only the trusted link and rejects unrelated or sensitive link hosts', async () => {

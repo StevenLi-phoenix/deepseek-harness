@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsh-courses-collector"
+version = "0.1.0"
+description = "Deterministic read-only Brightspace collection for DSH course sync"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+browser = ["playwright>=1.48,<2"]
+
+[project.scripts]
+courses-collector = "courses_collector.cli:main"
+bs-collect = "courses_collector.assignments:main"
+bs-page-rows = "courses_collector.page_rows:main"
+
+[tool.setuptools.packages.find]
+include = ["courses_collector*"]

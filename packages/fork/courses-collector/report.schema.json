@@ -1,0 +1,367 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DSH courses collector report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "read_at",
+    "dry_run",
+    "source_url",
+    "areas",
+    "ok"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "read_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "source_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "areas": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "assignments": {
+          "$ref": "#/$defs/area"
+        },
+        "announcements": {
+          "$ref": "#/$defs/area"
+        },
+        "content": {
+          "$ref": "#/$defs/area"
+        },
+        "grades": {
+          "$ref": "#/$defs/area"
+        },
+        "discussions": {
+          "$ref": "#/$defs/area"
+        },
+        "quizzes": {
+          "$ref": "#/$defs/area"
+        },
+        "materials": {
+          "$ref": "#/$defs/area"
+        },
+        "gradescope": {
+          "$ref": "#/$defs/area"
+        }
+      }
+    },
+    "ok": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "count",
+        "courses"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "checked",
+            "needs_ui",
+            "failed"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "courses": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/course"
+          }
+        }
+      }
+    },
+    "course": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "source",
+        "count",
+        "fallback_http",
+        "http_status",
+        "reason",
+        "changes",
+        "skips",
+        "task_changes",
+        "checked_ids",
+        "unmatched_tasks",
+        "ambiguous_tasks"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "checked",
+            "needs_ui",
+            "failed"
+          ]
+        },
+        "source": {
+          "enum": [
+            "api",
+            "page",
+            "api+page"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_http": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "http_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "action"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "action": {
+                "enum": [
+                  "new",
+                  "changed"
+                ]
+              }
+            }
+          }
+        },
+        "skips": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "task_changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "platform_id",
+              "version",
+              "url",
+              "fields"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "platform_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://"
+              },
+              "fields": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": false,
+                "properties": {
+                  "due_at": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "before",
+                      "after"
+                    ],
+                    "properties": {
+                      "before": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date-time"
+                      },
+                      "after": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "date-time"
+                      }
+                    }
+                  },
+                  "submission_status": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "before",
+                      "after"
+                    ],
+                    "properties": {
+                      "before": {
+                        "enum": [
+                          "unknown",
+                          "submitted",
+                          "not_submitted"
+                        ]
+                      },
+                      "after": {
+                        "enum": [
+                          "unknown",
+                          "submitted",
+                          "not_submitted"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "checked_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unmatched_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "url"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://"
+              }
+            }
+          }
+        },
+        "ambiguous_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "url",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "file_downloads": {
+          "description": "Present on materials results. Classified file reads, excluding references and policy skips. A course fails when more than one fifth return HTTP errors; each error also appears in skips.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eligible",
+            "http_errors"
+          ],
+          "properties": {
+            "eligible": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "http_errors": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "description": "needs_ui means an API permission gap required rendered evidence that could not be verified. The daily run records the area under courses_record_sync.failed with detail starting needs_ui: and does not alert solely for this state."
+}

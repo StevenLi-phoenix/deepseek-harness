@@ -118,6 +118,7 @@ export function mountJobApplyBrowser(ctx: Context, config: Config, restriction: 
   ctx.tools.restrict({ deny: inherited, preserveLocal: true })
   ctx.provide('jobApplyBrowser', {
     currentHost: (owner, signal) => bridge.browser.currentJobHost(owner, signal),
+    linkedHosts: (owner, signal) => bridge.browser.currentJobLinkHosts(owner, signal),
     registrableDomain,
   })
   let disposed = false

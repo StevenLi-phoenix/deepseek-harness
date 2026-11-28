@@ -9,7 +9,8 @@ import { Config } from '../src/config.ts'
 import { ActionGuard } from '../src/guard.ts'
 import { deniedJobUrl } from '../src/job-apply-network.ts'
 import { JobApplyUploads } from '../src/job-apply.ts'
-import { HeadlessBrowserSession } from '../src/session.ts'
+import { HeadlessBrowserSession, JOB_TAB_IDLE_MS } from '../src/session.ts'
+import { MAX_TABS } from '../src/tabs.ts'
 
 const deny = [
   'https://mail.google.com/', 'https://inbox.google.com/', 'https://drive.google.com/', 'https://docs.google.com/',
@@ -70,6 +71,8 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     if (req.url === '/private') { deniedRequests++; res.end('<title>synthetic private subject</title>synthetic private mail'); return }
     res.end(`<title>Unlisted employer</title><button id="popup" onclick="window.open('${privatePage}')">Open a window</button>
       <label>Search schools<input id="search" onkeydown="if(event.key==='Enter') output.textContent='Search '+this.value"></label>
+      <a href="https://www.employer.example/about">About the employer</a><a href="mailto:jobs@employer.example">Mail</a>
+      <a id="section" href="javascript:void(0)" onclick="output.textContent='Section'">Application Questions</a>
       <button id="safe" onclick="output.textContent='Allowed'">Review and Submit</button>
       <button id="pay" aria-label="Pay $25 application fee" onclick="output.textContent='Unexpected'">$<span id="icon">!</span></button>
       <label>Password<input id="password" type="password"></label><output id="output"></output>
@@ -101,6 +104,8 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     expect(opened.title).toBe('Unlisted employer')
     expect(await active.currentJobHost('worker')).toBe('jobs.example.test')
     expect(await active.currentJobHost('other')).toBeNull()
+    expect(await active.currentJobLinkHosts('worker')).toEqual(['www.employer.example'])
+    expect(await active.currentJobLinkHosts('other')).toEqual([])
     await expect(active.runJob('other', new ActionGuard(), async () => await active.read({}, opened.tab))).rejects.toThrow('not owned')
     warnings.length = 0
     const outcome = await job(async () => await active.click({ selector: '#popup' }, opened.tab))
@@ -116,6 +121,8 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
       if (box === null) throw new Error('fixture element did not render')
       return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
     }
+    await job(async () => await active.click({ selector: '#section' }, opened.tab))
+    expect(await page.locator('#output').textContent()).toBe('Section')
     const search = await point('#search')
     await job(async () => await active.fill({ point: search }, 'Example', opened.tab, { enter: true }))
     expect(await page.locator('#output').textContent()).toBe('Search Example')
@@ -141,6 +148,261 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     await expect(job(async () => await active.fillSecret(form, 'fixture-password', 'password', 'jobs.example.test', wrongSite.tab)))
       .rejects.toThrow(/only written on its own host/)
     expect(await (await active.page(wrongSite.tab)).locator('#password').inputValue()).toBe('')
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an idle job Session at the tab cap and reports a full strip it cannot free', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-tabs-'))
+  const infos: string[] = []
+  const server = createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(`<title>Posting ${req.url}</title>`) })
+  let browser: HeadlessBrowserSession | undefined
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    const base = `http://jobs.example.test:${bound.port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      jobTabIdleMs: 0,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    // The owner's own tabs, the boot page among them, fill the strip: nothing may be closed for a job Session, and the error says why.
+    const ownerTabs: string[] = [(await active.open(`${base}/owner-boot`)).tab]
+    for (let n = 0; active.tabs().state().length < MAX_TABS; n++) ownerTabs.push((await active.open(`${base}/owner-${n}`, true)).tab)
+    await expect(as('busy', async () => await active.open(`${base}/busy`, true))).rejects.toThrow(/at most 8 tabs/u)
+    await active.closeTab(ownerTabs.pop())
+    await active.closeTab(ownerTabs.pop())
+    const idle = [(await as('idle', async () => await active.open(`${base}/idle-1`, true))).tab]
+    idle.push((await as('idle', async () => await active.open(`${base}/idle-2`, true))).tab)
+    expect(active.tabs().state()).toHaveLength(MAX_TABS)
+    const busy = await as('busy', async () => await active.open(`${base}/busy`, true))
+    expect(busy.title).toBe('Posting /busy')
+    const left = active.tabs().state().map(tab => tab.id)
+    expect(left).not.toContain(idle[0])
+    expect(left).toContain(idle[1])
+    for (const tab of ownerTabs) expect(left).toContain(tab)
+    expect(infos.some(line => line.includes('closed idle job-apply tab') && line.includes(idle[0] ?? 'missing'))).toBe(true)
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('keeps a working Session’s popup at the cap and hands an idle Session’s tabs to the next worker', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-lease-'))
+  const infos: string[] = []
+  let port = 0
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html')
+    if (req.url === '/apply') {
+      res.end(`<title>Posting</title><button id="apply" onclick="window.open('http://ats.example.test:${port}/form')">Apply</button>`)
+      return
+    }
+    res.end(`<title>Page ${req.url}</title><input id="email">`)
+  })
+  let browser: HeadlessBrowserSession | undefined
+  let clock = 1_000_000
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    port = bound.port
+    const base = `http://jobs.example.test:${port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      now: () => clock,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    const open = () => active.tabs().state().map(tab => tab.id)
+    await active.open(`${base}/owner-boot`)
+    for (let n = 0; open().length < MAX_TABS - 2; n++) await active.open(`${base}/owner-${n}`, true)
+    const posting = await as('a', async () => await active.open(`${base}/apply`, true))
+    const clicked = await as('a', async () => await active.click({ selector: '#apply' }, posting.tab))
+    const popup = clicked.popups?.[0]?.tab ?? 'missing'
+    expect(open()).toHaveLength(MAX_TABS)
+    expect(await active.currentJobHost('a')).toBe('ats.example.test')
+
+    // Worker a just clicked Apply: its popup stays, and b is told the strip is busy rather than to close a tab.
+    clock += 1_000
+    await expect(as('b', async () => await active.open(`${base}/b`, true))).rejects.toThrow(/at most 8 tabs; every tab belongs to a Session still working/u)
+    expect(open()).toContain(popup)
+    await expect(as('b', async () => await active.read({}, posting.tab))).rejects.toThrow('still working in it')
+
+    // After a goes quiet, b sent to continue the form lists a's tabs, resumes one by URL and takes it over.
+    clock += JOB_TAB_IDLE_MS
+    expect((await as('b', async () => await active.listTabs())).map(tab => tab.id).sort()).toEqual([posting.tab, popup].sort())
+    expect((await as('b', async () => await active.resumeTab({ urlSubstring: '/form' }))).tab).toBe(popup)
+    expect(active.tabs().owner(popup)).toBe('job-apply:b')
+    expect(infos.some(line => line.includes('took over idle job-apply tab') && line.includes(popup))).toBe(true)
+    expect(await active.currentJobHost('b')).toBe('ats.example.test')
+    await expect(as('a', async () => await active.read({}, popup))).rejects.toThrow('still working in it')
+
+    // Once both are quiet, c's open closes the least recently used idle tab, never one of its own.
+    clock += JOB_TAB_IDLE_MS
+    const c = await as('c', async () => await active.open(`${base}/c`, true))
+    expect(c.title).toBe('Page /c')
+    expect(open()).not.toContain(posting.tab)
+    expect(open()).toContain(popup)
+    await expect(as('c', async () => await active.read({}, posting.tab))).rejects.toThrow(/is closed/u)
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an unclaimed blank tab, then from a working Session’s stale side tabs, keeping its current tab and a popup’s opener', async () => {
+  // One LinkedIn search worker kept seven employer pages open while it worked; apply workers found the strip full (2026-11-27).
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-stale-'))
+  const infos: string[] = []
+  let port = 0
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html')
+    if (req.url === '/apply') {
+      res.end(`<title>Posting</title><button id="apply" onclick="window.open('http://ats.example.test:${port}/form')">Apply</button>`)
+      return
+    }
+    res.end(`<title>Page ${req.url}</title>`)
+  })
+  let browser: HeadlessBrowserSession | undefined
+  let clock = 1_000_000
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    port = bound.port
+    const base = `http://jobs.example.test:${port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      now: () => clock,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    const open = () => active.tabs().state().map(tab => tab.id)
+    // A relaunch leaves the context's first page: blank, and nobody's.
+    await active.tabs().page()
+    const [first] = active.tabs().state()
+    const blank = first?.id ?? 'missing'
+    expect(first?.url).toBe('about:blank')
+    expect(active.tabs().owner(blank)).toBeNull()
+    const posting = await as('scan', async () => await active.open(`${base}/apply`, true))
+    const clicked = await as('scan', async () => await active.click({ selector: '#apply' }, posting.tab))
+    const popup = clicked.popups?.[0]?.tab ?? 'missing'
+    const side: string[] = []
+    for (let n = 0; open().length < MAX_TABS - 1; n++) {
+      clock += 1_000
+      side.push((await as('scan', async () => await active.open(`${base}/side-${String(n)}`, true))).tab)
+    }
+    clock += 1_000
+    const w = await as('w', async () => await active.open(`${base}/w`, true))
+    expect(open()).toHaveLength(MAX_TABS)
+    expect(side).toHaveLength(4)
+
+    // The unclaimed blank page goes first.
+    clock += 1_000
+    const b = await as('b', async () => await active.open(`${base}/b`, true))
+    expect(open()).not.toContain(blank)
+    expect(infos.some(line => line.includes('closed unclaimed blank tab') && line.includes(blank))).toBe(true)
+
+    // Every tab was used within the idle window: the strip is busy.
+    clock += 1_000
+    await expect(as('c', async () => await active.open(`${base}/c`, true))).rejects.toThrow(/every tab belongs to a Session still working/u)
+
+    // All four keep working; scan works in its popup and its newest side tab and leaves its first side tab behind.
+    clock += JOB_TAB_IDLE_MS
+    await as('scan', async () => await active.read({}, popup))
+    clock += 1_000
+    await as('scan', async () => await active.read({}, side[3]))
+    await as('w', async () => await active.read({}, w.tab))
+    await as('b', async () => await active.read({}, b.tab))
+    clock += 1_000
+    const c = await as('c', async () => await active.open(`${base}/c`, true))
+    expect(c.title).toBe('Page /c')
+    expect(open()).not.toContain(side[0])
+    for (const tab of [posting.tab, popup, side[1], side[2], side[3], w.tab, b.tab, c.tab]) expect(open()).toContain(tab)
+    expect(infos.some(line => line.includes('closed stale side tab') && line.includes(side[0] ?? 'missing') && line.includes('job-apply:scan'))).toBe(true)
+    await expect(as('scan', async () => await active.read({}, side[0]))).rejects.toThrow(/is closed/u)
+
+    // The Session that left them gets its own stale side tab back too; the posting that opened its popup stays.
+    clock += 1_000
+    await as('scan', async () => await active.open(`${base}/side-next`, true))
+    expect(open()).not.toContain(side[1])
+    expect(open()).toContain(posting.tab)
+    expect(open()).toContain(popup)
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('reads employer links from every tab a Session has on its current host, and from no other host', async () => {
+  // Tenet's Oracle application step links nowhere; its posting page on the same host links the employer (2026-11-27).
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-links-'))
+  const infos: string[] = []
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html')
+    if (req.url === '/job/1') { res.end('<title>Posting</title><a href="https://www.employer.example/">Employer</a>'); return }
+    if (req.url === '/elsewhere') { res.end('<title>Other site</title><a href="https://www.decoy.example/">Decoy</a>'); return }
+    res.end('<title>Confirm your identity</title><input id="email">')
+  })
+  let browser: HeadlessBrowserSession | undefined
+  let clock = 1_000_000
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    const ats = `http://eodr.example.test:${bound.port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      now: () => clock,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    const apply = await as('a', async () => await active.open(`${ats}/job/1/apply/email`, true))
+    expect(await active.currentJobLinkHosts('a')).toEqual([])
+    await as('a', async () => await active.open(`${ats}/job/1`, true))
+    clock += 1_000
+    await as('a', async () => await active.read({}, apply.tab))
+    expect(await active.currentJobHost('a')).toBe('eodr.example.test')
+    expect(await active.currentJobLinkHosts('a')).toEqual(['www.employer.example'])
+    expect(infos).toContain('headless-browser: read links of %d tabs on %s for a job-apply Session 2 eodr.example.test')
+    await as('a', async () => await active.open(`http://other.example.test:${bound.port}/elsewhere`, true))
+    clock += 1_000
+    await as('a', async () => await active.read({}, apply.tab))
+    expect(await active.currentJobLinkHosts('a')).toEqual(['www.employer.example'])
+    expect(await active.currentJobLinkHosts('b')).toEqual([])
   } finally {
     await browser?.close()
     server.closeAllConnections()

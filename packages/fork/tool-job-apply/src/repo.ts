@@ -26,6 +26,7 @@ const CLONE_KEYS = new Set([
   'remote.origin.url', 'remote.origin.pushurl', 'remote.origin.fetch',
   'branch.main.remote', 'branch.main.merge', 'user.name', 'user.email',
 ])
+const BRANCH_TRACKING = /^branch\.[^\s]+\.(?:remote|merge)$/u
 const GIT_OPTIONS = [
   '--no-pager', '--literal-pathspecs',
   '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
@@ -391,7 +392,8 @@ export class JobRepository {
     }
     const list = ['config', '--null', '--name-only', '--list']
     const local = nulRecords(await this.#git([...list, '--local', '--no-includes'], signal))
-    if (local.some(key => !CLONE_KEYS.has(key))) throw new Error('The clone has unsupported local Git configuration.')
+    // Upstream tracking of other local branches (follow-up PR branches) runs nothing, so it is not a reason to refuse.
+    if (local.some(key => !CLONE_KEYS.has(key) && !BRANCH_TRACKING.test(key))) throw new Error('The clone has unsupported local Git configuration.')
     const effective = nulRecords(await this.#git(list, signal))
     const executableConfig = [
       /^filter\./i, /^merge\..+\.driver$/i, /^url\..+\.(?:insteadof|pushinsteadof)$/i, /^remote\..+\.(?:vcs|receivepack|uploadpack)$/i,

@@ -110,6 +110,11 @@ export interface ElementFacts {
    * Never carries a `value` attribute. Page-derived, so only ever shown as page data.
    */
   readonly markup?: string
+  /**
+   * Where inside the element a click lands on it, relative to its box, when its label's own transparent input lies
+   * over its centre (Eightfold's radios); absent otherwise.
+   */
+  readonly labelAim?: { readonly x: number; readonly y: number }
   /** Number of ancestors that clip the element's box. */
   readonly clippedBy: number
   /** Fraction of the border box left after every clipping ancestor. */
@@ -273,6 +278,29 @@ export function probeElement(element: Element): ElementFacts {
       }
     }
   }
+  // A searchable dropdown that draws its own value (ADP's MDFSelectBox, a react-select) keeps its text input at
+  // opacity 0 until a person types, so what they see and click there is the control around it: the nearest box that
+  // holds the input's centre, has room for a click and holds no other control.
+  if (combobox && opacity <= 0.05 && area > 0) {
+    const centreX = rect.left + rect.width / 2
+    const centreY = rect.top + rect.height / 2
+    const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
+    const otherControl = (node: Element): boolean => Array.from(node.querySelectorAll(CONTROLS))
+      .some(control => control !== element && !(control instanceof HTMLInputElement && control.type === 'hidden'))
+    let field = element.parentElement
+    for (let depth = 0; field !== null && depth < 4 && !otherControl(field); depth += 1, field = field.parentElement) {
+      const box = field.getBoundingClientRect()
+      if (box.width * box.height >= 100 && box.left <= centreX && centreX <= box.right && box.top <= centreY && centreY <= box.bottom) {
+        let painted = 1
+        for (let current: Element | null = field; current !== null; current = parentOf(current)) {
+          const value = Number.parseFloat(view.getComputedStyle(current).opacity)
+          if (Number.isFinite(value)) painted *= value
+        }
+        if (painted > 0.05) opacity = painted
+        break
+      }
+    }
+  }
   const visibleLeft = Math.max(rect.left, clipLeft)
   const visibleTop = Math.max(rect.top, clipTop)
   const visibleRight = Math.min(rect.right, clipRight)
@@ -325,8 +353,12 @@ export function probeElement(element: Element): ElementFacts {
     if (node.querySelector('a[href], button, input, select, textarea, [role=button], [role=link]') !== null) return null
     return showsField(flatText(node)) ? node : null
   }
+  // A label's text under its own transparent input (Eightfold's radios at careers.qualcomm.com): a click there
+  // reaches the input, which is what a click on the label does, so that hit counts as reaching the label.
+  const ownControl = element.closest('label')?.control ?? null
   const reaches = (hit: Element): boolean => {
     for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    if (ownControl !== null && hit === ownControl) return true
     for (let node: Element | null = element; node !== null; node = parentOf(node)) {
       const nodeRoot = node.getRootNode()
       if (node.parentElement === null && nodeRoot instanceof ShadowRoot && nodeRoot.host === hit) return true
@@ -347,6 +379,27 @@ export function probeElement(element: Element): ElementFacts {
     aimHeight = box.height
   }
   const cover = centreHit === null || reaches(centreHit) ? null : centreHit
+  // Playwright refuses a click whose point another element takes, even the label's own input, so a label's text under
+  // that input is clicked at the point nearest its centre where the text itself is on top.
+  const onElement = (hit: Element | null): boolean => {
+    for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    return false
+  }
+  let labelAim: { readonly x: number; readonly y: number } | undefined
+  if (ownControl !== null && centreHit === ownControl) {
+    search: for (const down of [0.5, 0.25, 0.75]) {
+      for (let step = 1; step < 10; step += 1) {
+        for (const across of [0.5 + step * 0.05, 0.5 - step * 0.05]) {
+          const x = inViewLeft + inViewWidth * across
+          const y = inViewTop + inViewHeight * down
+          if (onElement(deepHit(x, y))) {
+            labelAim = { x: x - rect.left, y: y - rect.top }
+            break search
+          }
+        }
+      }
+    }
+  }
   const coverText = cover === null ? '' : (cover.getAttribute('aria-label') ?? flatText(cover)).slice(0, 60)
   const coverRole = cover?.getAttribute('role') ?? null
   const coveredBy = cover === null
@@ -394,6 +447,7 @@ export function probeElement(element: Element): ElementFacts {
     viewportFraction: fraction(inViewWidth * inViewHeight),
     occlusion: inViewWidth <= 0 || inViewHeight <= 0 ? 0 : hits / points.length,
     ...coveredBy === undefined ? {} : { coveredBy },
+    ...labelAim === undefined ? {} : { labelAim },
     markup,
     clippedBy,
     clippingFraction: fraction(clippedArea),
@@ -458,16 +512,23 @@ export function findSameNameCover(element: Element): Element | null {
  * painted `<label>`, or else the nearest painted ancestor (four levels up at
  * most) whose label or text is the input's accessible name and that holds no
  * other control; nothing otherwise, so a hidden decoy beside other controls
- * stays refused. The stand-in is scored and name-checked like any target.
+ * stays refused. A label the page makes click-through (`pointer-events: none`)
+ * toggles its control when a click lands on a part of it that takes pointer
+ * events: D. E. Shaw's privacy acknowledgment lays such a `<p>` over the native
+ * box, so the part at the box's centre stands in, clicked there through
+ * {@link findToggleAim}. A label target stands for its checkbox or radio. The
+ * stand-in is scored and name-checked like any target.
  * Playwright serialises this function, so it must not reference anything
  * outside itself; run it after {@link probeElement}, which scrolled the element
  * into view.
- * @param element - the hidden checkbox or radio.
+ * @param target - the hidden checkbox or radio, or its label.
  * @returns the element a person's click reaches, or `null`.
  */
-export function findToggleStandIn(element: Element): Element | null {
-  const view = element.ownerDocument.defaultView
-  if (view === null || !(element instanceof view.HTMLInputElement)) return null
+export function findToggleStandIn(target: Element): Element | null {
+  const view = target.ownerDocument.defaultView
+  if (view === null) return null
+  const element = target instanceof view.HTMLLabelElement ? target.control : target
+  if (!(element instanceof view.HTMLInputElement)) return null
   if (element.type !== 'checkbox' && element.type !== 'radio') return null
   const fold = (text: string): string => text.replace(/\s+/gu, ' ').trim().toLowerCase()
   const painted = (node: Element): boolean => {
@@ -482,13 +543,22 @@ export function findToggleStandIn(element: Element): Element | null {
     }
     return opacity > 0.05
   }
+  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
   const labels = Array.from(element.labels ?? [])
   const label = labels.find(painted)
-  if (label !== undefined) return label
+  // A painted label the guard already scored low gains nothing from standing in for itself.
+  if (label !== undefined) return label === target ? null : label
+  const box = element.getBoundingClientRect()
+  const hit = box.width * box.height > 0 && typeof element.ownerDocument.elementFromPoint === 'function'
+    ? element.ownerDocument.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+    : null
+  // The part must sit inside the box's own label and outside any other control, such as a privacy-notice link.
+  const ownPart = hit !== null && hit !== element && labels.some(owner => owner !== hit && owner.contains(hit))
+    && painted(hit) && hit.closest(CONTROLS) === null
+  if (ownPart) return hit
   const name = fold(element.getAttribute('aria-label') ?? labels.map(node => node.textContent).join(' '))
   if (name === '') return null
   const nameOf = (node: Element): string => fold(node.getAttribute('aria-label') ?? node.textContent)
-  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
   let node = element.parentElement
   for (let depth = 0; node !== null && depth < 4 && node !== element.ownerDocument.body; depth += 1, node = node.parentElement) {
     // A wider ancestor holds the same other control, so the climb stops at the first one.
@@ -496,6 +566,49 @@ export function findToggleStandIn(element: Element): Element | null {
     if (painted(node) && nameOf(node) === name) return node
   }
   return null
+}
+
+/**
+ * Where to click the part of a click-through label that {@link findToggleStandIn}
+ * returned for a checkbox or radio: the native box's centre, relative to that
+ * part, because the part's own centre can be a link inside it. Repeats that
+ * function's covering-part test, so it answers only when the part is the
+ * stand-in; nothing otherwise, and the stand-in is clicked at its centre.
+ * Playwright serialises this function, so it must not reference anything
+ * outside itself.
+ * @param target - the hidden checkbox or radio, or its label.
+ * @returns the click position inside the stand-in, or `null`.
+ */
+export function findToggleAim(target: Element): { readonly x: number; readonly y: number } | null {
+  const view = target.ownerDocument.defaultView
+  if (view === null) return null
+  const element = target instanceof view.HTMLLabelElement ? target.control : target
+  if (!(element instanceof view.HTMLInputElement) || (element.type !== 'checkbox' && element.type !== 'radio')) return null
+  // oxlint-disable-next-line sonarjs/no-identical-functions -- Playwright serialises each function alone, so the paint test repeats
+  const painted = (node: Element): boolean => {
+    const box = node.getBoundingClientRect()
+    if (box.width * box.height <= 0) return false
+    const style = view.getComputedStyle(node)
+    if (style.visibility !== 'visible' || style.pointerEvents === 'none') return false
+    let opacity = 1
+    for (let current: Element | null = node; current !== null; current = current.parentElement) {
+      const value = Number.parseFloat(view.getComputedStyle(current).opacity)
+      if (Number.isFinite(value)) opacity *= value
+    }
+    return opacity > 0.05
+  }
+  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
+  const labels = Array.from(element.labels ?? [])
+  if (labels.some(painted)) return null
+  const box = element.getBoundingClientRect()
+  if (box.width * box.height <= 0 || typeof element.ownerDocument.elementFromPoint !== 'function') return null
+  const x = box.left + box.width / 2
+  const y = box.top + box.height / 2
+  const hit = element.ownerDocument.elementFromPoint(x, y)
+  if (hit === null || hit === element || !labels.some(owner => owner !== hit && owner.contains(hit))) return null
+  if (!painted(hit) || hit.closest(CONTROLS) !== null) return null
+  const part = hit.getBoundingClientRect()
+  return { x: x - part.left, y: y - part.top }
 }
 
 /**
@@ -591,6 +704,9 @@ export function readElementFacts(value: unknown): ElementFacts {
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
   const ariaHiddenOwn = record.ariaHiddenOwn
   if (ariaHiddenOwn !== undefined && typeof ariaHiddenOwn !== 'boolean') throw new Error('the visibility probe returned no ariaHiddenOwn')
+  const labelAim = record.labelAim as { x?: unknown; y?: unknown } | undefined
+  if (labelAim !== undefined && (typeof labelAim !== 'object' || labelAim === null || typeof labelAim.x !== 'number' || typeof labelAim.y !== 'number'
+    || !Number.isFinite(labelAim.x) || !Number.isFinite(labelAim.y))) throw new Error('the visibility probe returned no labelAim')
   return {
     name: text('name'),
     value: text('value'),
@@ -610,6 +726,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     occlusion: number('occlusion'),
     ...coveredBy === undefined ? {} : { coveredBy },
     ...markup === undefined ? {} : { markup },
+    ...labelAim === undefined ? {} : { labelAim: { x: labelAim.x as number, y: labelAim.y as number } },
     clippedBy: number('clippedBy'),
     clippingFraction: number('clippingFraction'),
   }

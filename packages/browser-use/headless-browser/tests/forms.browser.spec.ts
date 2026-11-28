@@ -25,6 +25,7 @@ const FORM = `<!doctype html><title>signup</title><style>html { scroll-behavior:
 <label class="upload" for="resume">Upload résumé <input id="resume" type="file" style="display:none"></label>
 <input id="many" type="file" multiple style="opacity:0;position:absolute;width:1px;height:1px">
 <button id="chooser" type="button">Attach transcript</button>
+<span class="attachmentLabel"><span id="sfLabel">Upload from Device</span><input id="sf" type="file" aria-labelledby="sfLabel" style="opacity:0;position:absolute;width:120px;height:20px"></span>
 <button id="google" type="button" onclick="window.open('/popup', 'signin', 'width=480,height=600')">Continue with Google</button>
 <div style="position:relative;width:180px;height:40px"><button id="reset" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px">Reset Password</button><div id="cover" role="button" tabindex="0" aria-label="Reset Password" style="position:absolute;inset:0" onclick="document.getElementById('shown').textContent = 'reset sent'"></div></div>
 <div style="position:relative;width:180px;height:40px"><button id="decoy" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px" onclick="document.getElementById('shown').textContent = 'decoy'">Show details</button><div role="button" tabindex="0" aria-label="Continue" style="position:absolute;inset:0"></div></div>
@@ -196,17 +197,19 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     await expect(app.browser.fillSecret({ point: { x: 10, y: 10 } }, 'x', 'password', '127.0.0.1')).rejects.toThrow(/never a point/u)
   }, 120_000)
 
-  it('attaches a file to a hidden file input, several to a multiple input, and one through a chooser button', async () => {
+  it('attaches a file to a hidden file input, several to a multiple input, one through a chooser button, and one through a trigger that names the input', async () => {
     const app = await boot()
     await app.browser.open(`${app.base}/apply`)
     const resume = join(app.files, 'resume.pdf')
     const transcript = join(app.files, 'transcript.pdf')
     expect(await app.browser.attachFiles({ selector: '#resume' }, [resume])).toMatchObject({ ref: '#resume', inputs: 1 })
-    expect(await app.browser.attachFiles({ selector: 'input[type=file]', index: 1 }, [resume, transcript])).toMatchObject({ inputs: 2 })
+    expect(await app.browser.attachFiles({ selector: 'input[type=file]', index: 1 }, [resume, transcript])).toMatchObject({ inputs: 3 })
     const viaChooser = await app.browser.attachFiles({ trigger: { selector: '#chooser' } }, [transcript])
     expect(viaChooser.target?.name).toBe('Attach transcript')
+    // SAP SuccessFactors labels its transparent file input "Upload from Device", so the trigger names the input itself.
+    expect(await app.browser.attachFiles({ trigger: { selector: 'role=button[name="Upload from Device"]' } }, [resume])).toMatchObject({ inputs: 1 })
     const page = await app.browser.page()
-    expect(await page.locator('#shown').textContent()).toBe('resume:resume.pdf/12 many:resume.pdf/12+transcript.pdf/10 picker:transcript.pdf/10')
+    expect(await page.locator('#shown').textContent()).toBe('resume:resume.pdf/12 many:resume.pdf/12+transcript.pdf/10 sf:resume.pdf/12 picker:transcript.pdf/10')
     await expect(app.browser.attachFiles({ selector: '#email' }, [resume])).rejects.toThrow(/matches no input\[type=file\]/u)
     await expect(app.browser.attachFiles({ selector: '#resume' }, [resume, transcript])).rejects.toThrow(/takes one file/u)
   }, 120_000)

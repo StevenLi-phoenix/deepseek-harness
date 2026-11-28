@@ -1,0 +1,85 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/notify-learning/README.md
+/:
+  en: 2a5af034b1e75059
+  zh: b29d30f54d3400be
+/deepseek-ai-dsh-notify-learning:
+  en: 2e90edab925bdb3f
+  zh: 9f22f8216fb5a630
+/deepseek-ai-dsh-notify-learning/summary:
+  en: 9125a69e277155a9
+  zh: 0e73428cdce53ff2
+/deepseek-ai-dsh-notify-learning/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-notify-learning/use-this-package:
+  en: 0f9de0623b308ac4
+  zh: 955768c18f3878e0
+/deepseek-ai-dsh-notify-learning/use-this-package/what-counts-as-a-proactive-message-and-a-reaction:
+  en: f12815e90de48e6c
+  zh: 9b2f551a2811303e
+/deepseek-ai-dsh-notify-learning/use-this-package/the-nightly-pass:
+  en: 04fd7e33aa35b2d3
+  zh: 955a4c35c0308921
+/deepseek-ai-dsh-notify-learning/use-this-package/showing-and-deleting-rules:
+  en: d98ea2b05ce8c60e
+  zh: a0c5f6699e4f0a79
+/deepseek-ai-dsh-notify-learning/understand-the-implementation:
+  en: f7fa77369cc4eea2
+  zh: d69cf4dc6f0ed92f
+/deepseek-ai-dsh-notify-learning/further-exploration:
+  en: d3045013a103c75a
+  zh: b4a5138f314265ca
+/deepseek-ai-dsh-notify-learning/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-notify-learning/model-experience/rules-block-before-a-proactive-turn:
+  en: b8abfc6f2ee8d820
+  zh: 97ca129e04d404bd
+/deepseek-ai-dsh-notify-learning/model-experience/rules-block-before-a-proactive-turn/what-the-model-sees:
+  en: 58523b42ba5606cb
+  zh: 03871680b95e0f3e
+/deepseek-ai-dsh-notify-learning/model-experience/rules-block-before-a-proactive-turn/what-the-model-sees/verbatim-text-of-the-rules-block:
+  en: 94f1d9079d2efbaf
+  zh: 9f301dea71a5e27e
+/deepseek-ai-dsh-notify-learning/model-experience/rules-block-before-a-proactive-turn/token-effect:
+  en: 748febcdc87e9a4e
+  zh: 976449df2de62ecc
+/deepseek-ai-dsh-notify-learning/model-experience/rules-block-before-a-proactive-turn/kv-cache-effect:
+  en: 51e7a00e2f4cb942
+  zh: cd45e562e10c8c48
+/deepseek-ai-dsh-notify-learning/model-experience/rule-tools:
+  en: b52591d9510331f6
+  zh: 3f5066445c54b5e3
+/deepseek-ai-dsh-notify-learning/model-experience/rule-tools/what-the-model-sees:
+  en: 18baacb70433d369
+  zh: 49861e94342ccb25
+/deepseek-ai-dsh-notify-learning/model-experience/rule-tools/token-effect:
+  en: 39b1c36ee4ccefc2
+  zh: 1621638ee9c6cc3d
+/deepseek-ai-dsh-notify-learning/model-experience/rule-tools/kv-cache-effect:
+  en: 1eb214db1ea8a4da
+  zh: 2f21a45490f46d44
+/deepseek-ai-dsh-notify-learning/model-experience/nightly-pass:
+  en: e1037e30de820197
+  zh: 404cd5109474bb5e
+/deepseek-ai-dsh-notify-learning/model-experience/nightly-pass/what-the-model-sees:
+  en: 8eb38e3202ecaee8
+  zh: 9114c9d02facf551
+/deepseek-ai-dsh-notify-learning/model-experience/nightly-pass/what-the-model-sees/verbatim-text-of-the-system-prompt:
+  en: 33ff8b2addb2a127
+  zh: e6ed38c542d114a4
+/deepseek-ai-dsh-notify-learning/model-experience/nightly-pass/token-effect:
+  en: 43f8e8d11f5350ac
+  zh: 3996affeaf258464
+/deepseek-ai-dsh-notify-learning/model-experience/nightly-pass/kv-cache-effect:
+  en: e0ec1221adeef650
+  zh: 88e0c6e621866822
+/deepseek-ai-dsh-notify-learning/known-limitations-and-deferred-work:
+  en: 13b3be3503529608
+  zh: 9c2c1ebaa7815454
+/deepseek-ai-dsh-notify-learning/known-limitations-and-deferred-work/dev-note:
+  en: 0741c619f347d50c
+  zh: 60cd3a21d78e3e98

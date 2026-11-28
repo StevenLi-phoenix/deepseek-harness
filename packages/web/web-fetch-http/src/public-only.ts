@@ -1,4 +1,4 @@
-/** Direct, public-address-only dispatch for anonymous HTTP fetch. Loaded on demand on Node. */
+/** Direct, public-address-only dispatch for anonymous HTTP fetch. */
 import { lookup } from 'node:dns/promises'
 import net, { isIP } from 'node:net'
 import { Agent } from 'undici'

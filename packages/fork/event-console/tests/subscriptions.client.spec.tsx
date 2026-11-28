@@ -318,7 +318,7 @@ describe('SubscriptionsSection auto-archive card', () => {
     expect(card().lastElementChild).toBe(screen.getByTestId('plugin-config'))
   })
 
-  it('ends the section with the time check and its settings card', () => {
+  it('ends the section with the time check and the notification rules, each with its settings card', () => {
     const renderFactorySlot = vi.fn((name: string, props: { entries: readonly string[] }) => <div data-testid={`config-${props.entries.join(',')}`} data-name={name} />)
     const store = createResourceStore<SubscriptionsView>()
     store.update((draft) => { Object.assign(draft, { data: VIEW, checkedAt: NOW }) })
@@ -328,10 +328,13 @@ describe('SubscriptionsSection auto-archive card', () => {
     } as SubscriptionsProps
     const { container } = render(<SubscriptionsSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['time-gap'] })
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['notify-learning'] })
     expect(screen.getByText('时间间隔提示')).toBeTruthy()
     expect(screen.getByText(/会话安静一段时间之后才到达时/u)).toBeTruthy()
+    expect(screen.getByText('通知规则')).toBeTruthy()
+    expect(screen.getByText(/只有你自己的原话在两次不同的交流里一致时才学成一条规则/u)).toBeTruthy()
     const section = container.querySelector('section')!
-    expect(section.lastElementChild).toBe(screen.getByTestId('config-time-gap'))
+    expect(section.lastElementChild).toBe(screen.getByTestId('config-notify-learning'))
   })
 })
 

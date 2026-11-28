@@ -26,6 +26,7 @@ const ROW_OWNER: Record<string, string> = {
   'webhook-runtime': 'event',
   'owner-relay': 'event',
   'time-gap': 'event',
+  'notify-learning': 'event',
   'event-bus': 'event',
   'event-ingest': 'event',
   'plugin-config': 'event',

@@ -34,8 +34,8 @@ import { deniedJobUrl, JobNavigationRefused, protectJobPage, safeHost } from './
 import { JobSnapshots } from './job-snapshots.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import type { TabStore } from './tab-store.ts'
-import { BrowserTabs, ResumeTabError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
-import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
+import { BrowserTabs, MAX_TABS, ResumeTabError, TabLimitError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleAim, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -114,9 +114,33 @@ export interface SessionDeps {
   readonly kill?: (pid: number) => boolean
   /** Plugin-owned metadata journal; direct callers can construct an ephemeral browser. */
   readonly tabStore?: TabStore
+  /** How long a job-apply Session must make no browser call before another may close or take over its tabs. */
+  readonly jobTabIdleMs?: number
+  /** Clock for the job-apply tab leases; tests pass a fake one. */
+  readonly now?: () => number
 }
 
 const JOB_OWNER_PREFIX = 'job-apply:'
+/**
+ * A job-apply Session that has made no browser call this long has finished or stopped: at the tab cap another
+ * Session's open may close its tabs, and another job-apply Session may take one over, as a worker the lead sends to
+ * continue a form does. Workers act every few seconds; waiting for an emailed code is the longest pause, about two
+ * minutes. On 2026-11-27 finished workers' tabs filled the eight shared slots, and a lease measured per tab instead of
+ * per Session closed a worker's Apply popup one second after it opened. A Session still working may also lose a side
+ * tab it has not used this long, but never its current tab or a tab that opened another still open.
+ */
+export const JOB_TAB_IDLE_MS = 5 * 60_000
+
+/** One open tab as the tab-cap check weighs it. */
+interface SlotRow {
+  readonly id: string
+  readonly url: string
+  readonly owner: string | null | undefined
+  /** When a job-apply call last used the tab; 0 when none has. */
+  readonly used: number
+}
+/** How long reading a job page's links may take before it counts as none. */
+const JOB_LINK_READ_MS = 2_000
 
 interface JobCall {
   readonly owner: string
@@ -239,6 +263,18 @@ type Actionable = (Locator | ElementHandle<Element>) & {
   evaluate<R>(probe: (node: Element) => R): Promise<R>
 }
 
+/**
+ * @param resolution - the candidates a target resolved to.
+ * @returns indices of the candidates that are `input[type=file]`, in document order.
+ */
+async function fileInputsOf(resolution: Resolution): Promise<number[]> {
+  const inputs: number[] = []
+  for (let index = 0; index < resolution.facts.length; index += 1) {
+    if (await resolution.element(index).evaluate(node => node instanceof HTMLInputElement && node.type === 'file')) inputs.push(index)
+  }
+  return inputs
+}
+
 function passwordInput(node: Element): boolean {
   return node instanceof HTMLInputElement && node.type === 'password'
 }
@@ -252,7 +288,10 @@ export interface AttachTarget {
   readonly selector?: string
   /** Which matching file input, in document order; 0 when omitted. */
   readonly index?: number
-  /** A visible control whose click opens the file chooser, guarded like a click. */
+  /**
+   * A visible control whose click opens the file chooser, guarded like a click;
+   * one that names only file inputs is used as a selector is.
+   */
   readonly trigger?: TargetRequest
 }
 
@@ -297,12 +336,46 @@ interface Resolution {
   readonly facts: readonly ElementFacts[]
   /** The candidate at one index, ready to act on. */
   readonly element: (index: number) => Actionable
+  /** Where inside that candidate a click lands, when not at its centre. */
+  readonly aim?: (index: number) => ClickPoint | undefined
   /** The accessibility id that resolved to nothing, when it did. */
   readonly staleAxId?: string
   /** URL of the document the candidates are in: the page, or the embedded page that held the selector's matches. */
   readonly url: string
   /** Where follow-up lookups for the same element run, such as a dropdown's options: the page or that embedded page. */
   readonly scope: Page | Frame
+}
+
+/**
+ * @param page - a job page.
+ * @returns distinct http(s) hostnames of the main frame's first 500 anchors, or none when the page does not answer
+ *   within {@link JOB_LINK_READ_MS}.
+ */
+async function linkHosts(page: Page): Promise<string[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<string[]>((resolve) => { timer = setTimeout(() => { resolve([]) }, JOB_LINK_READ_MS) })
+  const read = page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), anchor => String((anchor as HTMLAnchorElement).href)).slice(0, 500))
+    .catch((): string[] => [])
+  try {
+    const hosts = new Set<string>()
+    for (const href of await Promise.race([read, late])) {
+      try {
+        const url = new URL(href)
+        if (url.protocol === 'https:' || url.protocol === 'http:') hosts.add(url.hostname)
+      } catch {
+        // A page's malformed href names no host.
+      }
+    }
+    return [...hosts]
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** A click position inside an element, in CSS pixels from its top-left corner. */
+interface ClickPoint {
+  readonly x: number
+  readonly y: number
 }
 
 /** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
@@ -313,6 +386,12 @@ export class HeadlessBrowserSession {
   readonly #deps: SessionDeps
   readonly #job = new AsyncLocalStorage<JobCall>()
   readonly #jobPages = new WeakSet<Page>()
+  /** When a job-apply Session last acted on each of its tabs, or a site opened it as a popup. */
+  readonly #jobTabUse = new Map<string, number>()
+  /** When each job-apply Session, by owner, last started or finished a browser call. */
+  readonly #jobOwnerUse = new Map<string, number>()
+  /** Browser calls each job-apply Session has in flight. */
+  readonly #jobInFlight = new Map<string, number>()
   readonly #jobSnapshots = new JobSnapshots()
   #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
@@ -426,7 +505,11 @@ export class HeadlessBrowserSession {
       // A keepalive's offscreen page is nobody's tab: adopting it would spend
       // one of the eight slots a person's tabs share.
       reserved: page => this.#background.has(page),
-      onAdopt: (page, owner) => this.#observePage(page, owner?.startsWith(JOB_OWNER_PREFIX) !== true),
+      onAdopt: (page, owner, id) => {
+        // A popup the site opened for a job Session is that Session's newest tab, so a code typed next goes to it.
+        if (owner?.startsWith(JOB_OWNER_PREFIX) === true) this.#jobTabUse.set(id, this.#now())
+        return this.#observePage(page, owner?.startsWith(JOB_OWNER_PREFIX) !== true)
+      },
       preparePopup: async (page, owner) => {
         if (owner?.startsWith(JOB_OWNER_PREFIX) !== true) return undefined
         try { await this.#protectJobPage(page) } catch (error: unknown) {
@@ -448,7 +531,42 @@ export class HeadlessBrowserSession {
    * @returns the invocation result.
    */
   async runJob<T>(session: string, guard: ActionGuard, run: () => Promise<T>): Promise<T> {
-    return await this.#job.run({ owner: JOB_OWNER_PREFIX + session, guard }, run)
+    const owner = JOB_OWNER_PREFIX + session
+    this.#jobOwnerUse.set(owner, this.#now())
+    this.#jobInFlight.set(owner, (this.#jobInFlight.get(owner) ?? 0) + 1)
+    try {
+      return await this.#job.run({ owner, guard }, run)
+    } finally {
+      const left = (this.#jobInFlight.get(owner) ?? 1) - 1
+      if (left === 0) this.#jobInFlight.delete(owner)
+      else this.#jobInFlight.set(owner, left)
+      this.#jobOwnerUse.set(owner, this.#now())
+    }
+  }
+
+  #now(): number {
+    return this.#deps.now?.() ?? Date.now()
+  }
+
+  /**
+   * @param owner - a tab's recorded owner.
+   * @returns whether it is a job-apply Session with no call in flight and none for {@link JOB_TAB_IDLE_MS}; one
+   * unseen since this process started (a restart ends every turn) counts as idle.
+   */
+  #jobOwnerIdle(owner: string | null | undefined): boolean {
+    if (owner?.startsWith(JOB_OWNER_PREFIX) !== true || (this.#jobInFlight.get(owner) ?? 0) > 0) return false
+    const used = this.#jobOwnerUse.get(owner)
+    return used === undefined || this.#now() - used >= (this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS)
+  }
+
+  /**
+   * @param tab - live tab id.
+   * @param caller - the scoped owner.
+   * @returns whether the caller owns the tab or may take it over from an idle job-apply Session.
+   */
+  #jobMayUse(tab: string, caller: string): boolean {
+    const owner = this.tabs().owner(tab)
+    return owner === caller || this.#jobOwnerIdle(owner)
   }
 
   /**
@@ -458,17 +576,89 @@ export class HeadlessBrowserSession {
    */
   async currentJobHost(session: string, signal?: AbortSignal): Promise<string | null> {
     signal?.throwIfAborted()
-    const tab = this.tabsState().find(entry => entry.active)
+    const page = await this.#currentJobPage(session)
+    return page === null ? null : safeHost(page.url())
+  }
+
+  /**
+   * Hosts the caller's pages on its current job site link to, so an enterprise ATS can vouch for its employer's mail
+   * domain: Tenet's Oracle application step links nowhere, while its posting page on the same host links
+   * www.tenethealth.com.
+   * @param session - trusted identity of the calling Session.
+   * @param signal - cancellation of the verification request.
+   * @returns distinct http(s) link hostnames from the main frames of the caller's tabs on its current tab's host, at
+   *   most 500 anchors each, current tab first; empty when unknown.
+   */
+  async currentJobLinkHosts(session: string, signal?: AbortSignal): Promise<string[]> {
+    signal?.throwIfAborted()
+    const pages = await this.#currentJobSitePages(session)
+    const hosts = new Set<string>()
+    for (const page of pages) {
+      if (signal?.aborted === true) break
+      for (const host of await linkHosts(page)) hosts.add(host)
+    }
+    if (pages.length > 1) this.#log.info('headless-browser: read links of %d tabs on %s for a job-apply Session', pages.length, safeHost(pages[0]?.url() ?? ''))
+    return [...hosts]
+  }
+
+  /**
+   * The active tab is whichever Session acted last; the caller's page is its own most recently used tab.
+   * @param session - trusted identity of the calling Session.
+   * @returns that tab's live, protected, admitted page, or null.
+   */
+  async #currentJobPage(session: string): Promise<Page | null> {
+    const [tab] = this.#ownedJobTabs(session)
+    return tab === undefined ? null : await this.#admittedJobPage(tab)
+  }
+
+  /**
+   * @param session - trusted identity of the calling Session.
+   * @returns the caller's current page, then its other live, admitted pages on the same host.
+   */
+  async #currentJobSitePages(session: string): Promise<Page[]> {
+    const [current, ...rest] = this.#ownedJobTabs(session)
+    const page = current === undefined ? null : await this.#admittedJobPage(current)
+    if (page === null) return []
+    const host = safeHost(page.url())
+    const pages = [page]
+    for (const tab of rest) {
+      const other = await this.#admittedJobPage(tab)
+      if (other !== null && safeHost(other.url()) === host) pages.push(other)
+    }
+    return pages
+  }
+
+  /**
+   * @param session - trusted identity of the calling Session.
+   * @returns ids of the tabs the caller owns, most recently used first, the active tab breaking ties.
+   */
+  #ownedJobTabs(session: string): string[] {
     const tabs = this.#tabs
-    if (tab === undefined || tabs === undefined || tabs.owner(tab.id) !== JOB_OWNER_PREFIX + session) return null
-    const page = await tabs.page(tab.id)
-    const url = page.url()
-    return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(url) ? null : safeHost(url)
+    if (tabs === undefined) return []
+    const owner = JOB_OWNER_PREFIX + session
+    return this.tabsState()
+      .filter(entry => tabs.owner(entry.id) === owner)
+      .sort((a, b) => (this.#jobTabUse.get(b.id) ?? 0) - (this.#jobTabUse.get(a.id) ?? 0) || Number(b.active) - Number(a.active))
+      .map(entry => entry.id)
+  }
+
+  /**
+   * @param tab - a live tab id.
+   * @returns the tab's page while it is open, protected, and on an admitted URL, or null.
+   */
+  async #admittedJobPage(tab: string): Promise<Page | null> {
+    const page = await this.tabs().page(tab)
+    return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(page.url()) ? null : page
   }
 
   async #protectJobPage(page: Page, onRefused?: (url: string) => void): Promise<void> {
+    // A page retrying a refused subresource (one LinkedIn page asked for "https://invalid" 11k times) logs it once.
+    const logged = new Set<string>()
     await protectJobPage(page, (url, closing) => {
       if (closing) onRefused?.(url)
+      const host = safeHost(url)
+      if (!closing && logged.has(host)) return
+      logged.add(host)
       this.#log.warn('headless-browser: %s', new JobNavigationRefused(url).message)
     })
     this.#jobPages.add(page)
@@ -487,9 +677,77 @@ export class HeadlessBrowserSession {
 
   #assertJobOwner(tab: string | undefined): void {
     const scoped = this.#job.getStore()
-    if (scoped !== undefined && (tab === undefined || this.tabs().owner(tab) !== scoped.owner)) {
-      throw new Error('the tab is not owned by this job-apply Session')
+    if (scoped === undefined) return
+    if (tab === undefined) throw new Error('the tab is not owned by this job-apply Session; name one of its tabs (headless_browser_tabs lists them)')
+    const owner = this.tabs().owner(tab)
+    if (owner === undefined) {
+      throw new Error(`tab ${tab} is closed (DSH restarted, or it sat idle and was closed for another worker); open the posting again`)
     }
+    if (owner !== scoped.owner) {
+      if (!this.#jobOwnerIdle(owner)) {
+        throw new Error('the tab is not owned by this job-apply Session; another job-apply Session is still working in it')
+      }
+      this.tabs().setOwner(tab, scoped.owner)
+      this.#log.info('headless-browser: %s took over idle job-apply tab %s from %s', scoped.owner, tab, owner)
+    }
+    this.#jobTabUse.set(tab, this.#now())
+  }
+
+  /**
+   * At the tab cap, close one tab for a job-apply Session, first match wins: an unclaimed blank page, which holds
+   * nothing; the least recently used tab of another job-apply Session that has gone idle; then the least recently
+   * used side tab of a job-apply Session still working, the caller's own included. One LinkedIn search worker kept
+   * seven employer pages open while it worked, and every apply worker was told the strip was full (2026-11-27).
+   * A working Session keeps its current tab, every tab it used in the last {@link JOB_TAB_IDLE_MS}, and the opener of
+   * any tab it still has; tabs outside job-apply are never closed.
+   * @param caller - the scoped owner asking for a slot.
+   * @returns whether a slot was freed.
+   */
+  async #freeJobSlot(caller: string): Promise<boolean> {
+    const tabs = this.tabs()
+    const open = tabs.state()
+    const live = new Set(open.map(tab => tab.id))
+    for (const id of this.#jobTabUse.keys()) if (!live.has(id)) this.#jobTabUse.delete(id)
+    if (open.length < MAX_TABS) return false
+    const rows: SlotRow[] = open
+      .map(tab => ({ id: tab.id, url: tab.url, owner: tabs.owner(tab.id), used: this.#jobTabUse.get(tab.id) ?? 0 }))
+      .sort((a, b) => a.used - b.used)
+    const blank = rows.find(tab => tab.owner === null && tab.url === 'about:blank')
+    const idle = rows.find(tab => tab.owner !== caller && this.#jobOwnerIdle(tab.owner))
+    const victim = blank ?? idle ?? await this.#staleJobTab(rows)
+    if (victim === undefined) {
+      this.#log.info('headless-browser: %d tabs open and none is blank, idle or a stale job-apply side tab; %s gets no slot', open.length, caller)
+      return false
+    }
+    await tabs.close(victim.id)
+    this.#jobTabUse.delete(victim.id)
+    if (victim === blank) this.#log.info('headless-browser: closed unclaimed blank tab %s to free a slot', victim.id)
+    else if (victim === idle) this.#log.info('headless-browser: closed idle job-apply tab %s to free a slot', victim.id)
+    else this.#log.info('headless-browser: closed stale side tab %s of working %s to free a slot', victim.id, String(victim.owner))
+    return true
+  }
+
+  /**
+   * @param rows - the open tabs with their owners, least recently used first.
+   * @returns the first tab a working job-apply Session has left behind: unused for {@link JOB_TAB_IDLE_MS}, not that
+   *   Session's most recently used tab, and not the opener of a tab still open; nothing when no tab qualifies.
+   */
+  async #staleJobTab(rows: readonly SlotRow[]): Promise<SlotRow | undefined> {
+    const tabs = this.tabs()
+    const jobRows = rows.filter(row => row.owner?.startsWith(JOB_OWNER_PREFIX) === true)
+    const current = new Map<string, SlotRow>()
+    for (const row of jobRows) if (row.owner !== null && row.owner !== undefined) current.set(row.owner, row)
+    const openers = new Set<Page>()
+    for (const row of rows) {
+      const opener = await (await tabs.page(row.id)).opener()
+      if (opener !== null) openers.add(opener)
+    }
+    const before = this.#now() - (this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS)
+    for (const row of jobRows) {
+      if (row.used > before || current.get(row.owner ?? '') === row) continue
+      if (!openers.has(await tabs.page(row.id))) return row
+    }
+    return undefined
   }
 
   /** At plugin boot, reconcile a previous run's open tabs immediately; otherwise launch on demand. */
@@ -509,7 +767,8 @@ export class HeadlessBrowserSession {
     const tabs = await this.tabs().list(context)
     await this.#deps.tabStore?.flush()
     const scoped = this.#job.getStore()
-    return scoped === undefined ? tabs : tabs.filter(tab => this.tabs().owner(tab.id) === scoped.owner && !deniedJobUrl(tab.url))
+    // An idle job Session's tabs are listed too: a worker sent to continue a form takes its tab over.
+    return scoped === undefined ? tabs : tabs.filter(tab => this.#jobMayUse(tab.id, scoped.owner) && !deniedJobUrl(tab.url))
   }
 
   /**
@@ -518,19 +777,35 @@ export class HeadlessBrowserSession {
    * @returns the tab's current metadata and whether it contains form controls.
    */
   async resumeTab(target: ResumeTarget): Promise<ResumedTab> {
-    this.#assertJobOwner('tab' in target ? target.tab : undefined)
+    const resolved = this.#jobResumeTarget(target)
+    this.#assertJobOwner('tab' in resolved ? resolved.tab : undefined)
     const context = await this.#launching
     if (context === undefined || this.#context !== context) {
       throw new ResumeTabError('no tab is open; reopen the page and refill the form')
     }
     try {
-      return await this.tabs().resume(context, target, (page) => {
+      return await this.tabs().resume(context, resolved, (page) => {
         this.#assertJobUrl(page.url())
         return probeResume(page, this.#navigationMethods.get(page), this.#httpErrors.get(page))
       })
     } finally {
       await this.#deps.tabStore?.flush()
     }
+  }
+
+  /**
+   * A job Session resumes by URL only among the tabs it may use, so the match cannot land on another worker's form.
+   * @param target - the tab id or URL substring the worker gave.
+   * @returns the target, with a URL resolved to one tab id inside a job-apply call.
+   */
+  #jobResumeTarget(target: ResumeTarget): ResumeTarget {
+    const scoped = this.#job.getStore()
+    if (scoped === undefined || 'tab' in target) return target
+    const matches = this.tabsState().filter(tab => tab.url.includes(target.urlSubstring) && this.#jobMayUse(tab.id, scoped.owner))
+    const [match] = matches
+    if (match === undefined) throw new ResumeTabError('no tab this job-apply Session may use matches that URL; reopen the page and refill the form')
+    if (matches.length > 1) throw new ResumeTabError('more than one tab matches that URL; use headless_browser_tabs and give a tab id')
+    return { tab: match.id }
   }
 
   #observePage(page: Page, downloads: boolean): () => void {
@@ -720,13 +995,22 @@ export class HeadlessBrowserSession {
     const prepare = scoped === undefined ? undefined : async (page: Page) => {
       await this.#protectJobPage(page, (url) => { refused = new JobNavigationRefused(url) })
     }
+    if (scoped !== undefined) await this.#freeJobSlot(scoped.owner)
     let tab: TabInfo
     try {
       tab = await this.tabs().create(url, scoped?.owner ?? openedBySessionId, prepare)
     } catch (error: unknown) {
-      if (scoped !== undefined) throw refused ?? new Error('job-apply navigation failed')
+      // A denied landing reports only its host; a full tab strip or a page that failed to load says so.
+      if (scoped !== undefined) {
+        const ownsNone = !this.tabsState().some(open => this.tabs().owner(open.id) === scoped.owner)
+        if (refused === undefined && error instanceof TabLimitError && ownsNone) {
+          throw new TabLimitError(MAX_TABS, 'every tab belongs to a Session still working; retry in a few minutes. This is browser capacity, not the employer')
+        }
+        throw refused ?? (error instanceof TabLimitError || error instanceof TabNavigationError ? error : new Error('job-apply navigation failed'))
+      }
       throw error
     }
+    if (scoped !== undefined) this.#jobTabUse.set(tab.id, this.#now())
     return { url: tab.url, title: tab.title, tab: tab.id }
   }
 
@@ -743,7 +1027,7 @@ export class HeadlessBrowserSession {
       try {
         const scoped = this.#job.getStore()
         const closed = await this.tabs().close(tabId)
-        return scoped === undefined ? closed : { ...closed, tabs: closed.tabs.filter(tab => this.tabs().owner(tab.id) === scoped.owner) }
+        return scoped === undefined ? closed : { ...closed, tabs: closed.tabs.filter(tab => this.#jobMayUse(tab.id, scoped.owner)) }
       } finally {
         await this.#deps.tabStore?.flush()
       }
@@ -848,7 +1132,9 @@ export class HeadlessBrowserSession {
       this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const mark = this.#downloads.mark()
       const popupMark = this.tabs().popupMark()
-      await this.#clickOn(page, async () => { await resolution.element(target.index).click() })
+      const position = resolution.aim?.(target.index)
+      const options = position === undefined ? undefined : { position }
+      await this.#clickOn(page, async () => { await resolution.element(target.index).click(options) })
       this.#activeGuard().anchor(page.url())
       this.#assertJobUrl(page.url())
       return { url: page.url(), target, ...await this.#openedSince(mark, popupMark) }
@@ -1153,7 +1439,9 @@ export class HeadlessBrowserSession {
    * Attach local files to a file input, or to the file chooser a visible
    * control opens. A file input is usually hidden behind a styled button, so a
    * selector that names an `input[type=file]` is used without the visibility
-   * score; a trigger is a click and passes the guard like one. The caller has
+   * score; a trigger is a click and passes the guard like one, unless it names
+   * only file inputs (a label points at the input), which then take the files
+   * as a selector's would. The caller has
    * already checked the paths against the upload directories.
    * @param target - the file input selector, or the trigger control.
    * @param paths - absolute paths of the files.
@@ -1167,6 +1455,21 @@ export class HeadlessBrowserSession {
       this.#assertJobUrl(page.url())
       if (target.trigger !== undefined) {
         const resolution = await this.#resolve(page, target.trigger)
+        const inputs = await fileInputsOf(resolution)
+        if (inputs.length > 0 && inputs.length === resolution.facts.length) {
+          // The trigger named the hidden file input itself, as SAP SuccessFactors labels its own with "Upload from Device";
+          // it takes the files the way a selector-named input does.
+          const pick = inputs[target.index ?? 0]
+          if (pick === undefined) throw new Error(`${resolution.ref} matches ${String(inputs.length)} file input(s); index ${String(target.index)} is out of range`)
+          const input = resolution.element(pick)
+          if (paths.length > 1 && !await input.evaluate(node => node instanceof HTMLInputElement && node.multiple)) {
+            throw new Error(`${resolution.ref} takes one file; attach the files one call each`)
+          }
+          if (this.#job.getStore() !== undefined) this.#authorizeTarget(resolution.url, resolution.facts[pick])
+          await input.setInputFiles(paths)
+          this.#log.info('headless-browser: trigger %s is a file input; attached %d file(s) to it on %s', resolution.ref, paths.length, pageOrigin(page.url()))
+          return { url: page.url(), ref: resolution.ref, inputs: inputs.length }
+        }
         const choice = this.#accept(this.#activeGuard().decideTarget({
           action: 'click',
           url: resolution.url,
@@ -1323,18 +1626,27 @@ export class HeadlessBrowserSession {
       this.#log.info('headless-browser: %s matches nothing on %s; acting in its embedded page %s', selector, pageOrigin(page.url()), pageOrigin(frame.url()))
     }
     const facts: ElementFacts[] = []
-    const covers: { readonly facts: ElementFacts; readonly element: Actionable }[] = []
+    const covers: { readonly facts: ElementFacts; readonly element: Actionable; readonly aim?: ClickPoint }[] = []
+    const aims = new Map<number, ClickPoint>()
     for (let index = 0; index < count; index += 1) {
       const candidate = readElementFacts(await locator.nth(index).evaluate(probeElement))
       facts.push(candidate)
-      if (candidate.tag === 'input' && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
+      if (candidate.labelAim !== undefined) {
+        // Label text partly under its own transparent input is clicked where the text is on top.
+        aims.set(index, candidate.labelAim)
+        this.#log.info('headless-browser: %s match %d: its label\'s own input covers its centre; clicking the text beside it', selector, index)
+      }
+      if ((candidate.tag === 'input' || candidate.tag === 'label') && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
         // A checkbox or radio the page draws itself hides the native input; its label or same-name box is what a person clicks.
         const standIn = (await locator.nth(index).evaluateHandle(findToggleStandIn)).asElement()
         if (standIn !== null) {
           const standInFacts = readElementFacts(await standIn.evaluate(probeElement))
+          // A part of a click-through label is clicked where the box is, clear of any link inside it.
+          const aim = await locator.nth(index).evaluate(findToggleAim) ?? undefined
           this.#log.info('headless-browser: %s match %d is a hidden %s; scoring the %s named %s that stands in for it',
             selector, index, candidate.role ?? 'toggle', standInFacts.tag, JSON.stringify(standInFacts.name))
-          covers.push({ facts: standInFacts, element: standIn })
+          if (aim !== undefined) this.#log.info('headless-browser: %s match %d: its stand-in is clicked over the native box', selector, index)
+          covers.push({ facts: standInFacts, element: standIn, ...aim === undefined ? {} : { aim } })
           continue
         }
       }
@@ -1369,6 +1681,7 @@ export class HeadlessBrowserSession {
         if (cover === undefined) throw new Error(`${selector} has no candidate ${String(index)}`)
         return cover.element
       },
+      aim: index => index < count ? aims.get(index) : covers[index - count]?.aim,
     }
   }
 
@@ -1380,7 +1693,9 @@ export class HeadlessBrowserSession {
   #authorizeTarget(url: string, facts?: ElementFacts): void {
     if (this.#job.getStore() === undefined) return
     this.#assertJobUrl(url)
-    if (facts?.href != null) this.#assertJobUrl(facts.href)
+    // A javascript: link runs the page's own script, as a button does (Tenet's Oracle "Application Questions" link);
+    // whatever it then loads meets the network deny list.
+    if (facts?.href != null && URL.parse(facts.href)?.protocol !== 'javascript:') this.#assertJobUrl(facts.href)
     if (facts?.formAction != null) {
       this.#assertJobUrl(facts.formAction)
       const decision = this.#activeGuard().decideNavigation({ action: 'open', url, target: facts.formAction, allowOrigin: false })

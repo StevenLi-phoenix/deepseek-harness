@@ -12,6 +12,8 @@ import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import type { Dispatcher, Response } from 'undici'
 import { classifyTransportFailure } from './transport-failure.ts'
 import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
+// Static: the package publishes lib/index.js alone, so a dynamic local import would become a chunk the build leaves out.
+import { publicDispatcher } from './public-only.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */
 export interface HttpFetchLimits {
@@ -73,7 +75,7 @@ export class HttpFetchProvider implements WebFetchProvider {
   /** Follow same-origin redirects up to the hop cap, then read the final response. */
   private async followAndRead(initialUrl: string, signal: AbortSignal, publicOnly: boolean): Promise<WebFetchResult> {
     let currentUrl = validateFetchUrl(initialUrl)
-    const publicDispatch = publicOnly ? (await import('./public-only.ts')).publicDispatcher : undefined
+    const publicDispatch = publicOnly ? publicDispatcher : undefined
     let redirectsFollowed = 0
 
     for (;;) {

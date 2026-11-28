@@ -21,7 +21,7 @@ kind: "package-reference"
 
 用 `job_repo` 的 `append` 在文件末尾追加完整行，或用 `replace` 替换唯一的原文匹配，不必把整份文件传回工具。原文不存在或出现多次时，`replace` 不改动文件。每段输入最多 64 KiB，局部编辑支持最多 1 MiB 的文件。简历文本只读。
 
-`jobtracker` 按进度表 API 的要求写字段：新增行带 `location` 和 `source`，已投递的行带 `date_applied`；没填完的表单保持 `queued` 并记 `step`。`job_issue` 的 `view` 返回一个问题单和最近 20 条评论，主人在评论里回答问题和批准。`job_repo` 的 `pull` 用 autostash 把本地提交变基到 `origin/main` 上，变基冲突时中止，因为一轮投递持有本地提交时其他设备也在推送。
+`jobtracker` 按进度表 API 的要求写字段：新增行带 `location` 和 `source`，已投递的行带 `date_applied`；没填完的表单保持 `queued` 并记 `step`。`list` 带 `company`、`role` 或 `url` 时在所有状态里查找，忽略大小写和标点；不带时只列一种状态，最新的在前。最多显示 40 行，匹配不超过 5 行才给完整备注，所以按公司和岗位查到的那一行带着更新时要保留的备注。`job_issue` 的 `view` 返回一个问题单和最近 20 条评论，主人在评论里回答问题和批准。`job_repo` 的 `pull` 用 autostash 把本地提交变基到 `origin/main` 上，变基冲突时中止，因为一轮投递持有本地提交时其他设备也在推送。
 
 ## 已知限制与后续工作
 

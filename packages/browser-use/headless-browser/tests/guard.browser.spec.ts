@@ -150,6 +150,29 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await page.locator('#resume').isChecked()).toBe(true)
   }, 120_000)
 
+  it('checks a box whose label is click-through by clicking the paragraph over it at the box, from the box or its label', async () => {
+    // Live apply.deshaw.com step 1, 2026-11-27 20:00 run: the input and its label scored pointerEvents 0 and the
+    // label's <p> covered the input. The link sits at the paragraph's centre, so a click there would miss the box.
+    const app = await boot()
+    await load(app, [
+      '<div class="confirmation-HTML checkbox-list" style="width:480px">',
+      '<label id="ack" class="checkbox-root-label" style="pointer-events:none;position:relative;display:block">',
+      '<span style="position:absolute;left:0;top:0"><input type="checkbox" id="confirm" name="Confirm" aria-required="true"',
+      ' style="margin:0;width:16px;height:16px"></span>',
+      '<p style="pointer-events:auto;position:relative;margin:0;height:40px">Click the checkbox to indicate your acknowledgment',
+      '<a href="#privacy" onclick="document.title=\'notice\';return false"',
+      ' style="position:absolute;left:160px;top:12px;width:160px;height:16px">Privacy Notice</a></p></label></div>',
+    ].join(''))
+    const page = await app.browser.page()
+    const byBox = await app.browser.click({ selector: '#confirm' })
+    expect(byBox.target).toMatchObject({ ref: '#confirm', index: 1 })
+    expect(await page.locator('#confirm').isChecked()).toBe(true)
+    const byLabel = await app.browser.click({ selector: '#ack' })
+    expect(byLabel.target).toMatchObject({ ref: '#ack', index: 1 })
+    expect(await page.locator('#confirm').isChecked()).toBe(false)
+    expect(await page.title()).not.toBe('notice')
+  }, 120_000)
+
   it('clicks a LinkedIn card title whose only text is an aria-hidden span wrapped over two lines', async () => {
     // Live linkedin.com/jobs/search-results, 2026-11-26 18:30 run: `text=<title>` matched only the aria-hidden span
     // and was refused at ariaHidden=0, occlusion=0.6, "covered" by the title <p> that holds it.
@@ -199,6 +222,49 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     const outcome = await app.browser.click({ selector: '#create' })
     expect(outcome.target).toMatchObject({ ref: '#create', index: 0, score: 1 })
     expect(await (await app.browser.page()).title()).toBe('clicked')
+  }, 120_000)
+
+  it('checks an Eightfold radio by its aria-hidden label text, under the transparent input it labels, and refuses a veiled label', async () => {
+    // Live careers.qualcomm.com EEO step, 2026-11-27 22:43: text="Male" scored ariaHidden 0, occlusion 0.40, under the label's own input.
+    const app = await boot()
+    const radio = (value: string, text: string): string => [
+      '<div class="radio-module_selector" style="position:relative;display:inline-flex;align-items:center;height:24px;margin-right:24px">',
+      `<input aria-disabled="false" aria-label="${text}, Please select your gender." id="G-${value}" name="G" type="radio" value="${value}"`,
+      ' style="position:absolute;left:0;top:0;width:44px;height:24px;margin:0;opacity:0;cursor:pointer;z-index:1">',
+      `<label for="G-${value}" aria-hidden="true" style="display:inline-flex;align-items:center;cursor:pointer">`,
+      '<span style="width:16px;height:16px;border:1px solid #333;border-radius:50%;margin-right:8px"></span>',
+      `<span id="G-${value}-label">${text}</span></label></div>`,
+    ].join('')
+    await load(app, [
+      '<fieldset style="border:0;margin:40px"><legend>Please select your gender. *</legend>', radio('M', 'Male'), radio('F', 'Female'), '</fieldset>',
+      '<div style="position:relative;margin:40px"><input type="checkbox" id="terms" aria-label="Terms">',
+      '<label for="terms" aria-hidden="true"><span id="agree">Agree</span></label>',
+      '<div id="veil" style="position:absolute;inset:0;opacity:0"></div></div>',
+    ].join(''))
+    const page = await app.browser.page()
+    await app.browser.click({ selector: 'text="Male"' })
+    expect(await page.locator('#G-M').isChecked()).toBe(true)
+    await app.browser.click({ selector: 'text="Female"' })
+    expect(await page.locator('#G-F').isChecked()).toBe(true)
+    expect((await refusalOf(app.browser.click({ selector: '#agree' }))).reason).toMatch(/ariaHidden=0\.00/u)
+    expect(await page.locator('#terms').isChecked()).toBe(false)
+  }, 120_000)
+
+  it('types into a react-select whose search input is transparent, as ADP draws its Country field', async () => {
+    // Live ADP WorkforceNow, 2026-11-27 20:58: MDFSelectBox__input scored opacity 0 and the arrow ariaHidden 0.
+    const app = await boot()
+    await load(app, [
+      '<div id="control" style="display:flex;width:300px;height:38px;border:1px solid #888;margin:40px;align-items:center">',
+      '<div style="flex:1;padding:0 8px;position:relative"><div id="shown" style="position:absolute;left:8px">Select...</div>',
+      '<div style="display:inline-grid"><input id="country" type="text" role="combobox" aria-autocomplete="list"',
+      ' aria-expanded="false" style="opacity:0;width:2px;border:0;padding:0;font:inherit"></div></div>',
+      '<div aria-hidden="true" style="width:30px">v</div><input type="hidden" name="country" value=""></div>',
+      '<script>document.getElementById("country").addEventListener("input", e => { document.getElementById("shown").textContent = e.target.value })</script>',
+    ].join(''))
+    const outcome = await app.browser.fill({ selector: '#country' }, 'United States')
+    expect(outcome.target).toMatchObject({ ref: '#country', index: 0 })
+    expect(outcome.target?.score).toBeGreaterThan(0.2)
+    expect(await (await app.browser.page()).locator('#shown').textContent()).toBe('United States')
   }, 120_000)
 
   it('types a year into a Workday-style date segment drawn by an aria-hidden display', async () => {
