@@ -1611,7 +1611,7 @@ describe('default one-shot summarizer', () => {
     expect(other.adapter.lastOptions).not.toHaveProperty('reasoningEffort')
   })
 
-  it('summarizes on the route that last answered, with its policy, after a later request got no response', async () => {
+  it('summarizes on the route that last answered, with its policy and without the effort of a later request that got no response', async () => {
     const { ctx, adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }], undefined, MODEL, {
       auto: false,
       maxTokens: 111,
@@ -1624,7 +1624,7 @@ describe('default one-shot summarizer', () => {
     ctx.llm.registerAdapter(['unanswered'], unanswered)
     const session = conversation(1)
     session.append('request/header', {
-      header: { config: { provider: 'unanswered', model: 'unanswered' } },
+      header: { config: { provider: 'unanswered', model: 'unanswered', reasoningEffort: brandString<ReasoningEffortId>('high') } },
       reason: 'change',
     })
 
@@ -1633,6 +1633,7 @@ describe('default one-shot summarizer', () => {
     expect(session.requestHeader()?.config.model).toBe('unanswered')
     expect(output).toMatchObject({ provider: MODEL, model: MODEL, maxTokens: 222 })
     expect(adapter.lastOptions).toMatchObject({ provider: MODEL, model: MODEL, maxTokens: 222 })
+    expect(adapter.lastOptions).not.toHaveProperty('reasoningEffort')
     expect(unanswered.lastOptions).toBeUndefined()
   })
 
