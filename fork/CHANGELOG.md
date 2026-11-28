@@ -4,6 +4,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+- Fork CI repair (2026-11-28): main was red since 11-25. The Python courses collector moved to `fork/courses-collector/` (the workspace tree holds only packages), the sign-in popup and job-apply browser specs pass again (a fixture's transparent upload input covered the button; the browser specs get 120 s), and duplication, lint, Cordis/config/tool catalogs, plugin entry exports, locale metadata, export JSDoc, README Model Experience sections, type-equiv blocks, and the `toolFilter.preserveLocal` persistence record are back in line.
 - Compaction on the unattended preset now waits until the top of the window:
   trigger 607,808 tokens on the 1M route (was 200,000 for one hour), a 128k
   verbatim tail (was 40k) and a 32k summary cap (was 16k). Condensing early
