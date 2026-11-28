@@ -37,6 +37,7 @@ interface ParentDirectory {
 
 async function openParent(path: string): Promise<ParentDirectory> {
   try {
+    /* v8 ignore if -- Linux CI coverage cannot run the macOS descriptor branch; tests/cover-convert.spec.ts exercises it on macOS */
     if (process.platform === 'darwin') {
       const handle = await open(path, DIRECTORY | DARWIN_NOFOLLOW_ANY)
       return { handle, path, prefix: path, noFollow: DARWIN_NOFOLLOW_ANY }
@@ -64,6 +65,7 @@ async function openParent(path: string): Promise<ParentDirectory> {
 
 async function verifyParent(parent: ParentDirectory): Promise<void> {
   try {
+    /* v8 ignore else -- Linux CI coverage cannot run the macOS descriptor branch; tests/cover-convert.spec.ts exercises it on macOS */
     if (parent.noFollow !== DARWIN_NOFOLLOW_ANY) {
       if (await readlink(parent.prefix) === parent.path) return
     } else {

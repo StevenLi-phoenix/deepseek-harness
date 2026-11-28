@@ -253,10 +253,18 @@ function issueMarker(kind: string, ref: string): string {
   const host = url.hostname.replace(/^www\./u, '')
   const path = url.pathname.replace(/\/$/u, '')
   const query = url.search.slice(1).split('&').filter((param) => {
-    const name = param.split('=', 1)[0] ?? ''
-    return name !== '' && !TRACKING_PARAM.test(name)
+    const name = /^[^=]+/u.exec(param)?.[0]
+    return name !== undefined && !TRACKING_PARAM.test(name)
   }).join('&')
   return `<!-- job-apply-key: ${kind}:https://${host}${path}${query ? `?${query}` : ''} -->`
+}
+
+/** Drop the oldest entries of an insertion-ordered map until one more entry fits under `bound`. */
+function makeRoom<K, V>(map: Map<K, V>, bound: number): void {
+  for (const key of map.keys()) {
+    if (map.size < bound) return
+    map.delete(key)
+  }
 }
 
 function labelOf(kind: string): string {
@@ -288,17 +296,11 @@ export class IssueItems {
     const result = await this.run('gh', ['issue', 'list', '-R', REPO, '--label', label, '--state', state, '--limit', String(limit), '--json', 'number,title,state,body,labels'], signal)
     const issues = ISSUE.array().parse(JSON.parse(result)).filter(issue => issue.labels.some(item => item.name === label))
     const allowed = this.#listed.get(session) ?? new Map<number, string>()
-    if (this.#listed.size >= 512 && !this.#listed.has(session)) {
-      const oldest = this.#listed.keys().next().value
-      if (oldest !== undefined) this.#listed.delete(oldest)
-    }
+    if (!this.#listed.has(session)) makeRoom(this.#listed, 512)
     this.#listed.set(session, allowed)
     for (const issue of issues) {
       if (issue.state === 'CLOSED') { allowed.delete(issue.number); continue }
-      if (allowed.size >= 250) {
-        const oldest = allowed.keys().next().value
-        if (oldest !== undefined) allowed.delete(oldest)
-      }
+      makeRoom(allowed, 250)
       allowed.set(issue.number, label)
     }
     return JSON.stringify(issues.map(issue => ({ ...issue, body: issue.body.slice(0, 2500) })))
@@ -408,10 +410,7 @@ export class IssueItems {
     if (!url.startsWith(prefix) || !Number.isSafeInteger(number) || number < 1 || url !== `${prefix}${number}`) {
       throw new Error('GitHub did not return the expected issue URL; do not assume the action landed.')
     }
-    if (this.#recent.size >= 250) {
-      const oldest = this.#recent.keys().next().value
-      if (oldest !== undefined) this.#recent.delete(oldest)
-    }
+    makeRoom(this.#recent, 250)
     this.#recent.set(marker, number)
     return `created ${number}`
   }

@@ -487,6 +487,7 @@ export class JobRepository {
         }
       case 'push':
         return this.#git(['push', '--no-verify', '--no-follow-tags', '--recurse-submodules=no', '--', ORIGIN, `${MAIN}:${MAIN}`], signal)
+      /* v8 ignore next -- commit returns above once its message check passes, so only pull and push reach this switch */
       default:
         throw new Error('Unsupported job repository operation.')
     }

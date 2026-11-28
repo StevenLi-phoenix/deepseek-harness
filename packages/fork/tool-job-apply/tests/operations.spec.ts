@@ -9,6 +9,11 @@ describe('narrow tracker calls', () => {
     expect(trackerCall({ ...row, operation: 'update', id: 'abcdef00-0000-4000-8000-000000000042' })[0]).toBe('update_application')
   })
 
+  it('records only the step when an unfinished row has no note', () => {
+    expect(JSON.parse(trackerCall({ ...row, note: undefined })[1])).toMatchObject({ notes: 'Step 3' })
+    expect(JSON.parse(trackerCall({ ...row, step: undefined, note: undefined })[1])).not.toHaveProperty('notes')
+  })
+
   it('sends the fields the tracker API requires and records the application date', () => {
     const applied = { ...row, status: 'applied', step: undefined, note: 'Greenhouse confirmation page', date_applied: '2026-11-27', visa_flag: true, requires_cover_letter: false, deadline: '2026-12-15' }
     expect(JSON.parse(trackerCall(applied)[1])).toEqual({
@@ -78,6 +83,16 @@ describe('narrow tracker calls', () => {
     expect(await listed({ company: 'Nobody Corp' }, request)).toMatchObject({ matched: 0, rows: [] })
   })
 
+  it('lists every status without filters and tolerates rows without a URL or notes', async () => {
+    const rows = [stored(1, 'Example Corp', 'Engineer', 'queued', 'Has notes'), { ...stored(2, 'Example Corp', 'Engineer', 'applied'), url: null, notes: null }]
+    const request = vi.fn<typeof fetch>().mockImplementation(async () => envelope(rows))
+    const all = await listed({}, request)
+    expect(request).toHaveBeenLastCalledWith('https://mcp.lishuyu.app/api/jobtracker/list_applications', expect.objectContaining({ body: '{}' }))
+    expect(all).toMatchObject({ filter: { status: 'all' }, matched: 2 })
+    expect(all.rows[1]).toMatchObject({ id: rows[1]!.id, notes: '' })
+    expect(ids(await listed({ url: 'https://jobs.example.com/1' }, request))).toEqual([rows[0]!.id])
+  })
+
   it('bounds a large list to 40 rows with shortened notes, and reads past the write size cap', async () => {
     const signal = new AbortController().signal
     const rows = Array.from({ length: 300 }, (_, index) => stored(index, `Company ${index}`, 'Engineer', 'applied', 'n'.repeat(900)))
@@ -110,6 +125,8 @@ describe('narrow tracker calls', () => {
     await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^Jobtracker returned an unsuccessful/u)
     request.mockResolvedValueOnce(new Response('x'.repeat(50_001)))
     await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^Jobtracker response exceeded the size limit; do not assume the write landed/u)
+    request.mockResolvedValueOnce(new Response(null))
+    await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^Jobtracker returned no response body; do not assume the write landed\.$/u)
     request.mockRejectedValueOnce(new TypeError('fetch failed: Authorization: Bearer test-bearer'))
     await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^The fixed jobtracker request did not complete; do not assume the write landed\.$/u)
   })
@@ -125,6 +142,9 @@ describe('narrow tracker calls', () => {
     { source: 'craigslist' },
     { date_applied: '11/27/2026' },
     { location: 'see /Users/dsh-runtime/.dsh' },
+    { url: 'https://careers.example.test/123' },
+    { operation: 'update' as const, id: 'row-7' },
+    { id: 'abcdef00-0000-4000-8000-000000000042' },
   ])('refuses invalid or injected input %j', (input) => {
     expect(() => trackerCall({ ...row, ...input })).toThrow()
   })
@@ -201,6 +221,97 @@ describe('narrow issue calls', () => {
     await expect(issues.list('job-1', 'pending', 'open', 25, signal)).rejects.toThrow(/jobtracker/)
     await expect(issues.create('question', 'company-role', 'Question', 'open file:///tmp/private', signal)).rejects.toThrow()
     await expect(issues.close('job-1', 123, 'read ~/.dsh/.env', signal)).rejects.toThrow()
+    for (const limit of [0, 51, 2.5]) await expect(issues.list('job-1', 'approval', 'open', limit, signal)).rejects.toThrow(/1 through 50/u)
     expect(run).not.toHaveBeenCalled()
+  })
+
+  const open = (number: number, labels = [{ name: 'needs-approval' }]) => ({ number, state: 'OPEN', title: `Issue ${number}`, body: 'Untrusted input', labels })
+  const listing = (pages: unknown[][]) => vi.fn(async (_file: string, args: readonly string[]) => {
+    if (args[1] === 'list') return JSON.stringify(pages.length > 1 ? pages.shift() : pages[0])
+    return args[1] === 'view' ? JSON.stringify(open(Number(args[2]))) : ''
+  })
+
+  it('forgets an issue that a later list reports closed', async () => {
+    const issues = new IssueItems(listing([[open(7)], [{ ...open(7), state: 'CLOSED' }]]))
+    const signal = new AbortController().signal
+    await issues.list('job-1', 'approval', 'all', 10, signal)
+    await issues.list('job-1', 'approval', 'all', 10, signal)
+    await expect(issues.close('job-1', 7, 'completed', signal)).rejects.toThrow(/list/iu)
+  })
+
+  it('keeps eligible issues for the 512 most recent Sessions and the 250 most recent issues of each', async () => {
+    const signal = new AbortController().signal
+    const issues = new IssueItems(listing([[open(7)]]))
+    for (let session = 0; session <= 512; session += 1) await issues.list(`job-${session}`, 'approval', 'open', 10, signal)
+    await issues.list('job-512', 'approval', 'open', 10, signal)
+    await expect(issues.close('job-0', 7, 'completed', signal)).rejects.toThrow(/list/iu)
+    await expect(issues.close('job-1', 7, 'completed', signal)).resolves.toBe('Closed #7 as completed.')
+    const page = new IssueItems(listing([Array.from({ length: 251 }, (_, index) => open(index + 1))]))
+    await page.list('job-1', 'approval', 'open', 50, signal)
+    await expect(page.close('job-1', 1, 'completed', signal)).rejects.toThrow(/list/iu)
+    await expect(page.close('job-1', 2, 'not planned', signal)).resolves.toBe('Closed #2 as not planned.')
+  })
+
+  it('does not make a viewed issue eligible unless it is open with a workflow label', async () => {
+    const signal = new AbortController().signal
+    for (const issue of [{ ...open(9), state: 'CLOSED' }, open(9, [{ name: 'unrelated' }])]) {
+      const issues = new IssueItems(vi.fn(async () => JSON.stringify({ ...issue, comments: [{ author: null, body: 'From a deleted account', createdAt: '2026-11-27T12:00:00Z' }] })))
+      const viewed = JSON.parse(await issues.view('job-1', 9, signal)) as { comments: Array<{ author: string }> }
+      expect(viewed.comments).toEqual([{ author: 'unknown', body: 'From a deleted account', createdAt: '2026-11-27T12:00:00Z' }])
+      await expect(issues.comment('job-1', 9, 'Following up', signal)).rejects.toThrow(/list/iu)
+    }
+    const mismatched = new IssueItems(vi.fn(async () => JSON.stringify({ ...open(10), comments: [] })))
+    await expect(mismatched.view('job-1', 9, signal)).rejects.toThrow(/unexpected issue number/u)
+  })
+
+  it('reports an existing issue for the same key instead of creating one', async () => {
+    const run = vi.fn(async () => '[{"number":5,"state":"CLOSED"}]')
+    const issues = new IssueItems(run)
+    await expect(issues.create('approval', 'https://jobs.example.com/role/', 'Approve', 'Approve the answers', new AbortController().signal)).resolves.toBe('closed 5')
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('keys an issue by its posting URL without empty or tracking query parameters', async () => {
+    const run = vi.fn(async (_file: string, args: readonly string[]) => args[1] === 'list' ? '[]' : 'https://github.com/StevenLi-phoenix/jobapplication/issues/3\n')
+    const issues = new IssueItems(run)
+    const signal = new AbortController().signal
+    await issues.create('upload', 'https://jobs.example.com/role/?=x&&ref=feed&id=2', 'Upload', 'Upload the transcript', signal)
+    await issues.create('upload', 'https://jobs.example.com/plain/', 'Upload', 'Upload the transcript', signal)
+    const bodies = run.mock.calls.filter(([, args]) => args[1] === 'create').map(([, args]) => args.find(arg => arg.startsWith('--body=')))
+    expect(bodies).toEqual([
+      '--body=Upload the transcript\n\n<!-- job-apply-key: upload:https://jobs.example.com/role?id=2 -->',
+      '--body=Upload the transcript\n\n<!-- job-apply-key: upload:https://jobs.example.com/plain -->',
+    ])
+  })
+
+  it('refuses a created or recently created issue that GitHub does not confirm', async () => {
+    const signal = new AbortController().signal
+    for (const output of ['Created issue 4', 'https://github.com/StevenLi-phoenix/jobapplication/issues/0', 'https://github.com/StevenLi-phoenix/jobapplication/issues/04']) {
+      const issues = new IssueItems(vi.fn(async (_file: string, args: readonly string[]) => args[1] === 'list' ? '[]' : output))
+      await expect(issues.create('owner', 'company-role', 'Owner action', 'Please sign the form', signal)).rejects.toThrow(/expected issue URL/u)
+    }
+    const run = vi.fn(async (_file: string, args: readonly string[]) => {
+      if (args[1] === 'list') return '[]'
+      if (args[1] === 'view') return '{"number":43,"state":"OPEN"}'
+      return 'https://github.com/StevenLi-phoenix/jobapplication/issues/42'
+    })
+    const issues = new IssueItems(run)
+    await issues.create('owner', 'company-role', 'Owner action', 'Please sign the form', signal)
+    await expect(issues.create('owner', 'company-role', 'Owner action', 'Please sign the form', signal)).rejects.toThrow(/unexpected issue number/u)
+  })
+
+  it('remembers the 250 most recently created keys while the issue list catches up', async () => {
+    let created = 0
+    const run = vi.fn(async (_file: string, args: readonly string[]) => {
+      if (args[1] === 'list') return '[]'
+      if (args[1] === 'view') return JSON.stringify({ number: Number(args[2]), state: 'OPEN' })
+      created += 1
+      return `https://github.com/StevenLi-phoenix/jobapplication/issues/${created}`
+    })
+    const issues = new IssueItems(run)
+    const signal = new AbortController().signal
+    for (let index = 0; index <= 250; index += 1) await issues.create('question', `posting-${index}`, 'Question', 'Which start date?', signal)
+    await expect(issues.create('question', 'posting-1', 'Question', 'Which start date?', signal)).resolves.toBe('open 2')
+    await expect(issues.create('question', 'posting-0', 'Question', 'Which start date?', signal)).resolves.toBe('created 252')
   })
 })

@@ -1,9 +1,18 @@
-import { link, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { appendFile, link, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { crc32, inflateRawSync } from 'node:zlib'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { convertCoverLetter } from '../src/cover-convert.ts'
+import type { FsHooks } from './fs-hooks.ts'
+
+const hooks = vi.hoisted((): FsHooks => ({}))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const { hookedFs } = await import('./fs-hooks.ts')
+  return hookedFs(await importOriginal(), hooks)
+})
 
 const signal = new AbortController().signal
 let fixture: string
@@ -19,7 +28,23 @@ beforeEach(async () => {
   await Promise.all([mkdir(letters, { recursive: true }), mkdir(outside)])
 })
 
-afterEach(async () => rm(fixture, { force: true, recursive: true }))
+afterEach(async () => {
+  hooks.open = undefined
+  hooks.readlink = undefined
+  await rm(fixture, { force: true, recursive: true })
+})
+
+/** Run `action` on the handle of each matching open, after the real open; on Linux the path is a descriptor name. */
+function afterOpen(matches: (path: string, flags: number) => boolean, action: (handle: FileHandle) => Promise<void> | void): void {
+  hooks.open = async (path, flags, open) => {
+    const handle = await open()
+    if (typeof flags === 'number' && matches(path, flags)) await action(handle)
+    return handle
+  }
+}
+
+const isSource = (path: string, flags: number): boolean => path.endsWith('/Letter.md') && (flags & constants.O_DIRECTORY) === 0
+const createsDocx = (path: string, flags: number): boolean => path.endsWith('/Letter.docx') && (flags & constants.O_CREAT) !== 0
 
 function parts(archive: Buffer): Record<string, string> {
   const end = archive.length - 22
@@ -153,5 +178,144 @@ describe.skipIf(process.platform !== 'darwin' && process.platform !== 'linux')('
     await writeFile(join(letters, 'Letter.md'), 'letter')
     await expect(convertCoverLetter(root, 'cover_letters/Letter.md', AbortSignal.abort())).rejects.toMatchObject({ name: 'AbortError' })
     await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('reads a trailing backslash as a hard line break', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'Line one\\\nLine two\n')
+    const output = await convertCoverLetter(root, 'cover_letters/Letter.md', signal)
+    expect(parts(await readFile(join(root, output)))['word/document.xml'])
+      .toContain('>Line one</w:t><w:br/><w:t xml:space="preserve">Line two</w:t>')
+  })
+
+  it('refuses a clone path that is not absolute and normalized', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    for (const clone of ['clone', '/', `${root}/`, `${root}/../clone`]) {
+      await expect(convertCoverLetter(clone, 'cover_letters/Letter.md', signal)).rejects.toThrow('not configured correctly')
+    }
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('requires a platform with descriptor-based path checks', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' })
+    try {
+      await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('requires macOS or Linux')
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+    }
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('stops before reading when the cover letter directory is replaced', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    afterOpen(isSource, async () => {
+      await rename(letters, join(root, 'moved'))
+      await mkdir(letters)
+      await writeFile(join(letters, 'Letter.md'), 'replacement')
+    })
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('moved during conversion')
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+    await expect(readdir(join(root, 'moved'))).resolves.toEqual(['Letter.md'])
+  })
+
+  it('stops when the cover letter directory cannot be verified', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    let verifying = false
+    hooks.open = async (path, flags, open) => {
+      const directory = typeof flags === 'number' && (flags & constants.O_DIRECTORY) !== 0
+      if (verifying && directory) throw new Error('injected directory failure')
+      const handle = await open()
+      if (typeof flags === 'number' && isSource(path, flags)) verifying = true
+      return handle
+    }
+    hooks.readlink = async (_path, readlink) => {
+      if (verifying) throw new Error('injected descriptor failure')
+      return readlink()
+    }
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('cannot be verified')
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('refuses a source that grows past 64 KiB while it is read', async () => {
+    const source = join(letters, 'Letter.md')
+    await writeFile(source, 'letter')
+    afterOpen(isSource, (handle) => {
+      const read = handle.read.bind(handle)
+      vi.spyOn(handle, 'read').mockImplementationOnce(async (...args) => {
+        await appendFile(source, 'x'.repeat(64 * 1024))
+        return read(...args)
+      })
+    })
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('exceeds 64 KiB')
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('refuses a source that changes while it is read', async () => {
+    const source = join(letters, 'Letter.md')
+    await writeFile(source, 'letter')
+    afterOpen(isSource, (handle) => {
+      const read = handle.read.bind(handle)
+      vi.spyOn(handle, 'read').mockImplementationOnce(async (...args) => {
+        const result = await read(...args)
+        await utimes(source, new Date(0), new Date(0))
+        return result
+      })
+    })
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('changed while it was being read')
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('stops without output when cancelled while the source is read', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    const controller = new AbortController()
+    afterOpen(isSource, () => { controller.abort() })
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('reports an unconfirmed conversion when the source cannot be closed', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    afterOpen(isSource, (handle) => {
+      const close = handle.close.bind(handle)
+      vi.spyOn(handle, 'close').mockImplementationOnce(async () => {
+        await close()
+        throw new Error('injected close failure')
+      })
+    })
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('could not be converted safely')
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it.each([
+    [Object.assign(new Error('injected link loop'), { code: 'ELOOP' }), 'already exists or is linked'],
+    [new Error('injected failure without a code'), 'could not be created'],
+  ])('names why the sibling DOCX could not be created %#', async (failure, message) => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    hooks.open = async (path, flags, open) => {
+      if (typeof flags === 'number' && createsDocx(path, flags)) throw failure
+      return open()
+    }
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow(message)
+    await expect(readdir(letters)).resolves.toEqual(['Letter.md'])
+  })
+
+  it('does not confirm a DOCX that gains a second link after creation', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    afterOpen(createsDocx, async () => { await link(join(letters, 'Letter.docx'), join(outside, 'alias.docx')) })
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('could not be confirmed')
+  })
+
+  it('does not confirm a DOCX replaced at its name during the write', async () => {
+    await writeFile(join(letters, 'Letter.md'), 'letter')
+    hooks.open = async (path, flags, open) => {
+      if (typeof flags === 'number' && path.endsWith('/Letter.docx') && (flags & constants.O_CREAT) === 0) {
+        await rename(join(letters, 'Letter.docx'), join(outside, 'moved.docx'))
+        await writeFile(join(letters, 'Letter.docx'), 'impostor')
+      }
+      return open()
+    }
+    await expect(convertCoverLetter(root, 'cover_letters/Letter.md', signal)).rejects.toThrow('could not be confirmed')
+    await expect(readFile(join(letters, 'Letter.docx'), 'utf8')).resolves.toBe('impostor')
   })
 })

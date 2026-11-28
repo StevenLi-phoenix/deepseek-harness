@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { link, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, link, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -8,11 +8,18 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as JobTools from '../src/index.ts'
 import { present } from '../src/operations.ts'
 import { JobRepository, validateText } from '../src/repo.ts'
 import type { CommandRunner } from '../src/repo.ts'
+import type { FsHooks } from './fs-hooks.ts'
+
+const hooks = vi.hoisted((): FsHooks => ({}))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const { hookedFs } = await import('./fs-hooks.ts')
+  return hookedFs(await importOriginal(), hooks)
+})
 
 const exec = promisify(execFile)
 const signal = new AbortController().signal
@@ -36,10 +43,35 @@ beforeEach(async () => {
   repo = new JobRepository(root, run)
 })
 
-afterEach(async () => rm(fixture, { force: true, recursive: true }))
+afterEach(async () => {
+  hooks.open = undefined
+  await rm(fixture, { force: true, recursive: true })
+})
 
 async function git(...args: string[]): Promise<string> {
   return run('git', args, signal)
+}
+
+/** A runner that answers the fixed Git queries for an ordinary main clone; `answer` overrides one command's output. */
+type GitAnswer = (command: readonly string[]) => string | undefined | Promise<string | undefined>
+
+function fakeGit(answer: GitAnswer = () => undefined): CommandRunner {
+  return async (_file, args) => {
+    const command = args.slice(args.indexOf('-C') + 2)
+    const overridden = await answer(command)
+    if (overridden !== undefined) return overridden
+    if (command[0] === 'config') return 'core.bare\0'
+    if (command[0] === 'status') return ' M TODO.md\0'
+    if (command[0] === 'symbolic-ref') return 'refs/heads/main\n'
+    if (command[0] === 'remote') return `${origin}\n`
+    return ''
+  }
+}
+
+async function fakeClone(): Promise<void> {
+  await mkdir(join(root, '.git'))
+  await writeFile(join(root, '.git', 'config'), '[core]\n\tbare = false\n')
+  await writeFile(join(root, 'TODO.md'), 'todos\n')
 }
 
 async function initialize(): Promise<void> {
@@ -104,7 +136,8 @@ describe('JobRepository.read', () => {
   it.each(['/etc/hosts', 'logs/../TODO.md', 'logs//a.log', 'logs/./a.log', 'logs/a\\b.log', 'logs/a;foo.log',
     'logs/:magic', 'logs/a*.log', 'logs/.git/config', 'references/nested/file.md', 'references/private.txt',
     'README.md', 'jobtracker/nested.txt', '.agents/skills/other/SKILL.md', 'private/resume.pdf',
-    'private/resume.txt.bak', 'private/Resume.txt', 'private/nested/resume.txt', '.git/config'])('rejects non-allowlisted path %s', async (path) => {
+    'private/resume.txt.bak', 'private/Resume.txt', 'private/nested/resume.txt', '.git/config',
+    `logs/${'a'.repeat(240)}.log`])('rejects non-allowlisted path %s', async (path) => {
     await expect(repo.read(path)).rejects.toThrow('not readable')
   })
 
@@ -120,6 +153,46 @@ describe('JobRepository.read', () => {
     await expect(repo.read('logs/secret.txt')).rejects.toThrow('real directories')
     await expect(repo.read('TODO.md')).rejects.toThrow('no links')
     await expect(repo.read('answers.md')).rejects.toThrow('no links')
+  })
+})
+
+describe('JobRepository root and read races', () => {
+  it('requires an absolute normalized root', () => {
+    for (const path of ['clone', `${root}/`, `${root}/../clone`]) {
+      expect(() => new JobRepository(path, run)).toThrow('absolute normalized path')
+    }
+  })
+
+  it('reports a truncated window, and no later line, when the read window ends at a line break', async () => {
+    const window = 1024 * 1024
+    await writeFile(join(root, 'SKILL.md'), `${'a'.repeat(window - 1)}\ntail\n`)
+    await expect(repo.read('SKILL.md')).resolves.toMatch(/^a+\n\[Read truncated by the byte limit\.\]$/u)
+    await expect(repo.read('SKILL.md', 2)).rejects.toThrow('beyond the')
+  })
+
+  it.skipIf(process.getuid?.() === 0)('surfaces a permission failure instead of treating the file as missing', async () => {
+    await mkdir(join(root, 'logs'))
+    await writeFile(join(root, 'logs', 'history.log'), 'entry\n')
+    await chmod(join(root, 'logs'), 0o600)
+    try {
+      await expect(repo.read('logs/history.log')).rejects.toMatchObject({ code: 'EACCES' })
+    } finally {
+      await chmod(join(root, 'logs'), 0o700)
+    }
+  })
+
+  it('refuses a file replaced at its name after it was opened', async () => {
+    const file = join(root, 'TODO.md')
+    await writeFile(file, 'original\n')
+    hooks.open = async (path, flags, open) => {
+      const handle = await open()
+      if (path === file && typeof flags === 'number') {
+        await writeFile(join(root, 'replacement'), 'replacement\n')
+        await rename(join(root, 'replacement'), file)
+      }
+      return handle
+    }
+    await expect(repo.read('TODO.md')).rejects.toThrow('regular file with no links')
   })
 })
 
@@ -248,6 +321,34 @@ describe('JobRepository targeted edits', () => {
       await expect(repo.replace(path, 'untouched', 'new')).rejects.toThrow(/real directories|no links/u)
     }
     await expect(readFile(target, 'utf8')).resolves.toBe('untouched\n')
+  })
+
+  it('refuses an edit when another writer changes the file before it is read', async () => {
+    const file = join(root, 'TODO.md')
+    await writeFile(file, 'initial\n')
+    hooks.open = async (path, flags, open) => {
+      if (path === file && typeof flags === 'number') await appendFile(file, 'other writer\n')
+      return open()
+    }
+    await expect(repo.append('TODO.md', 'mine')).rejects.toThrow('changed while writing')
+    await expect(readFile(file, 'utf8')).resolves.toBe('initial\nother writer\n')
+  })
+
+  it('refuses an edit when the file grows past 1 MiB while it is read', async () => {
+    const file = join(root, 'TODO.md')
+    await writeFile(file, 'initial\n')
+    hooks.open = async (path, flags, open) => {
+      const handle = await open()
+      if (path !== file || typeof flags !== 'number') return handle
+      const read = handle.read.bind(handle)
+      vi.spyOn(handle, 'read').mockImplementationOnce(async (...args) => {
+        await appendFile(file, 'x'.repeat(1024 * 1024))
+        return read(...args)
+      })
+      return handle
+    }
+    await expect(repo.append('TODO.md', 'mine')).rejects.toThrow('1 MiB')
+    expect((await stat(file)).size).toBe(8 + 1024 * 1024)
   })
 
   it('does not lose an acknowledged edit when two mounts edit the same file', async () => {
@@ -454,5 +555,60 @@ describe('JobRepository.git', () => {
       ['pull', '--rebase', '--autostash', '--no-tags', '--no-recurse-submodules', '--', origin, 'refs/heads/main'],
       ['rebase', '--abort'],
     ])
+  })
+
+  it('still reports the pull failure when aborting the rebase also fails', async () => {
+    await initialize()
+    const intercepted = new JobRepository(root, (file, args, abort) => {
+      const command = args.slice(args.indexOf('-C') + 2)
+      if (command[0] === 'pull') return Promise.reject(new Error('The fixed git command did not succeed (1)'))
+      if (command[0] === 'rebase') return Promise.reject(new Error('No rebase in progress'))
+      return run(file, args, abort)
+    })
+    await expect(intercepted.git('pull', undefined, undefined, signal)).rejects.toThrow('did not succeed (1)')
+  })
+
+  it('requires a commit message and changed, allowlisted regular files', async () => {
+    await initialize()
+    await expect(repo.git('commit', undefined, ['TODO.md'], signal)).rejects.toThrow('commit message is required')
+    await expect(repo.git('commit', 'Nothing changed', undefined, signal)).rejects.toThrow('1 through 100 changed repository paths')
+    await expect(repo.git('commit', 'Unchanged file', ['answers.md'], signal)).rejects.toThrow('must be changed, allowlisted files')
+    await mkdir(join(root, 'logs'))
+    await symlink(join(outside, 'secret'), join(root, 'logs/link.log'))
+    await expect(repo.git('commit', 'Only a link changed', undefined, signal)).rejects.toThrow('No changed, allowlisted regular files')
+    expect(await git('rev-list', '--count', 'HEAD')).toBe('1\n')
+  })
+
+  it('refuses linked worktrees and URL rewrites from any Git configuration level', async () => {
+    await initialize()
+    await git('config', '--global', 'url.https://example.test/.insteadOf', 'gh:')
+    await expect(repo.git('status', undefined, undefined, signal)).rejects.toThrow('URL rewrites are not supported')
+    await git('config', '--global', '--unset', 'url.https://example.test/.insteadOf')
+    await writeFile(join(root, '.git', 'commondir'), '../main/.git\n')
+    await expect(repo.git('status', undefined, undefined, signal)).rejects.toThrow('ordinary clone')
+  })
+
+  it('refuses incomplete or unexpected Git records', async () => {
+    await fakeClone()
+    const unterminated = new JobRepository(root, fakeGit(command => command[0] === 'config' ? 'core.bare' : undefined))
+    await expect(unterminated.git('status', undefined, undefined, signal)).rejects.toThrow('incomplete record')
+    for (const record of ['XY TODO.md\0', ' M_TODO.md\0']) {
+      const unexpected = new JobRepository(root, fakeGit(command => command[0] === 'status' ? record : undefined))
+      await expect(unexpected.git('status', undefined, undefined, signal)).rejects.toThrow('unexpected status record')
+    }
+  })
+
+  it('stops a commit when the clone root is replaced during the operation', async () => {
+    await fakeClone()
+    const commits: Array<readonly string[]> = []
+    const swapping = new JobRepository(root, fakeGit(async (command) => {
+      if (command[0] === 'commit') commits.push(command)
+      if (command[0] !== 'status') return undefined
+      await rename(root, join(fixture, 'replaced-clone'))
+      await mkdir(root)
+      return ' M TODO.md\0'
+    }))
+    await expect(swapping.git('commit', 'Update TODO', ['TODO.md'], signal)).rejects.toThrow('root changed during the operation')
+    expect(commits).toEqual([])
   })
 })
