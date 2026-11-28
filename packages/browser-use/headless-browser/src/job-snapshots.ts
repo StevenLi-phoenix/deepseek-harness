@@ -9,7 +9,13 @@ export class JobSnapshots {
   readonly #images = new Map<string, { readonly owner: string; readonly data: Buffer }>()
   #bytes = 0
 
-  /** @param owner - trusted Session key. @param data - newly captured PNG. @returns its opaque identifier. */
+  /**
+   * Retain a screenshot for one Session, evicting the oldest images while the count or total bytes exceed their limits.
+   * @param owner - trusted Session key.
+   * @param data - newly captured PNG.
+   * @returns the opaque identifier for later retrieval.
+   * @throws Error - when the image alone exceeds the byte limit.
+   */
   add(owner: string, data: Buffer): string {
     if (data.length > MAX_BYTES) throw new Error('The browser snapshot is too large; capture the viewport instead.')
     const id = `job-snapshot:${randomUUID()}.png`
@@ -23,7 +29,12 @@ export class JobSnapshots {
     return id
   }
 
-  /** @param owner - trusted Session key. @param id - exact screenshot identifier. @returns that Session's image if retained. */
+  /**
+   * Look up a retained screenshot, visible only to the Session that stored it.
+   * @param owner - trusted Session key.
+   * @param id - exact screenshot identifier.
+   * @returns the PNG bytes, or undefined when the id is unknown, evicted, or owned by another Session.
+   */
   get(owner: string, id: string): Buffer | undefined {
     const image = this.#images.get(id)
     return image?.owner === owner ? image.data : undefined

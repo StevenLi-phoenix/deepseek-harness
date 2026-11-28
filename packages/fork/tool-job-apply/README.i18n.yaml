@@ -15,14 +15,38 @@
   en: d4e9596852e22009
   zh: f591b7f6f019cb27
 /deepseek-ai-dsh-tool-job-apply/use-this-package:
-  en: 8a2250a90faa29b2
-  zh: 87f61eafda14f447
+  en: 556b9e3df33f7c7e
+  zh: 846746bdd3c85ef7
 /deepseek-ai-dsh-tool-job-apply/model-experience:
-  en: 6e11c48564afe8af
-  zh: d173a0b40946429b
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tools:
+  en: eb1da784ed164d6f
+  zh: a6cdd8577b10b936
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tools/what-the-model-sees:
+  en: 06524c303d434165
+  zh: c02578a674f415cd
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tools/token-effect:
+  en: 2f5533cb9ffee7a7
+  zh: aad2912967932d7a
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tools/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 9f7edb91bdc225ee
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tool-results:
+  en: 330156b0319c3c4e
+  zh: 90fd62ea6204836f
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tool-results/what-the-model-sees:
+  en: cdf0ceccd955275d
+  zh: c13ba87f82190b95
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tool-results/token-effect:
+  en: d79ba630e1aeda7d
+  zh: 856bfa523336f02c
+/deepseek-ai-dsh-tool-job-apply/model-experience/job-tool-results/kv-cache-effect:
+  en: d2ad175f6469c773
+  zh: df396e9d77cc6750
 /deepseek-ai-dsh-tool-job-apply/known-limitations-and-deferred-work:
-  en: 57d29094077fcd3f
-  zh: ab30e8f8c627796c
+  en: 3ab9748f77c47348
+  zh: 5d8e38a910963ece
 /deepseek-ai-dsh-tool-job-apply/known-limitations-and-deferred-work/dev-note:
   en: bc71202bced42671
   zh: 6df779bd1b807dfa

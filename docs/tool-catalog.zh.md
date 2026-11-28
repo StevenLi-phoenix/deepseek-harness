@@ -1224,7 +1224,7 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
     },
     "limit": {
       "type": "number",
-      "description": "Maximum number of lines to return. Defaults to 2000."
+      "description": "Maximum number of lines to return. Defaults to 2000, the most one call returns."
     }
   },
   "required": [

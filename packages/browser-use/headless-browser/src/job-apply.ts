@@ -38,6 +38,7 @@ const REQUIRED_INTEGER = { type: 'integer', required: true } as const
 
 /** Strict upload policy for exact PDF names; never give Chromium a local filesystem path. */
 export class JobApplyUploads {
+  /** Absolute `private/` and `cover_letters/` directories under the configured root, where approved upload files live. */
   readonly dirs: readonly string[]
   readonly #files: ReadonlyMap<string, string>
   readonly #root: string
@@ -59,7 +60,12 @@ export class JobApplyUploads {
     this.#log = log
   }
 
-  /** @param files - exact basenames from the tool call. @returns authorized PDF payloads, in call order. */
+  /**
+   * Map each requested name to a mapped PDF or a `cover_letters/` PDF or DOCX and read it as a verified regular file.
+   * @param files - exact mapped basenames or `cover_letters/` paths from the tool call.
+   * @returns the authorized upload payloads, in call order.
+   * @throws UploadRefusedError - when the count is outside the upload limit, a name is not permitted, or a file fails the safety checks.
+   */
   async resolve(files: readonly string[]): Promise<UploadFile[]> {
     if (files.length < 1 || files.length > MAX_UPLOAD_FILES) throw new UploadRefusedError('invalid upload count')
     const sources = files.map((path) => {

@@ -570,6 +570,7 @@ export class HeadlessBrowserSession {
   }
 
   /**
+   * Name the host of the caller's current job tab, for checks that the page matches an approved site.
    * @param session - trusted identity of the calling Session.
    * @param signal - cancellation of the verification request.
    * @returns hostname of the current owned, admitted tab, or null.
@@ -1075,7 +1076,12 @@ export class HeadlessBrowserSession {
     })
   }
 
-  /** @param session - trusted calling Session. @param id - returned snapshot identifier. @returns the owned screenshot bytes. */
+  /**
+   * Read back a screenshot this job-apply Session captured.
+   * @param session - trusted calling Session.
+   * @param id - snapshot identifier returned by the screenshot call.
+   * @returns the PNG bytes, or undefined when the id is unknown, evicted, or owned by another Session.
+   */
   jobSnapshot(session: string, id: string): Buffer | undefined {
     return this.#jobSnapshots.get(JOB_OWNER_PREFIX + session, id)
   }
