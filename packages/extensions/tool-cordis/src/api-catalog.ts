@@ -3452,11 +3452,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.',
     methods: [
       {
-        signature: 'readonly jobLeadSessionId: SessionId | undefined',
-        description: 'The sole target of the job-lead route.',
-        parameters: [],
-      },
-      {
         signature: 'registerChannel(channel: RelayChannel): () => void',
         description: 'Add a channel.',
         parameters: [{ name: 'channel', description: 'name, delivery, hooks, and fallback label.' }],

@@ -3816,13 +3816,15 @@ export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 
 ## `@deepseek-ai/dsh-owner-relay`
 
-- `source`: [`packages/fork/owner-relay/src/index.ts:20`](../packages/fork/owner-relay/src/index.ts)
+- `source`: [`packages/fork/owner-relay/src/index.ts:32`](../packages/fork/owner-relay/src/index.ts)
 
 ```ts config-catalog
 /** Host configuration of the dedicated job-lead route. */
 export interface Config {
-  /** ID of the persistent root Session on the job-lead preset; omitted disables routing. */
+  /** Seed ID of a persistent root Session on the job-lead preset; omitted disables routing. */
   jobLeadSessionId?: string
+  /** UTF-8 byte cap for a forwarded job-lead text, including the truncation marker. */
+  jobLeadMaxForwardBytes?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-owner-relay -->

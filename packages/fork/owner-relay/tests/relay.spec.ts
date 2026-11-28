@@ -1,7 +1,13 @@
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { setImmediate } from 'node:timers/promises'
 import { Context } from '@deepseek-ai/cordis'
 import type { MainAgentMessage, OwnerNote } from '@deepseek-ai/dsh-event-bus'
-import { afterEach, describe, expect, it } from 'vitest'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { WorkspaceActiveSessionError } from '@deepseek-ai/dsh-workspace'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readJobLeadState } from '../src/job-lead-state.ts'
 import OwnerRelay, { type RelayAnswer, type RelayChannel, type RelayDecision, type RelayDelivery } from '../src/index.ts'
 
 /** A log line the relay wrote. */
@@ -11,9 +17,13 @@ interface LogLine {
 }
 
 const contexts: Context[] = []
+const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
+  await Promise.all(cleanups.splice(0).map(cleanup => cleanup()))
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 
 /** Let pending deliveries, fallbacks, and settle hooks run. */
@@ -26,6 +36,8 @@ async function mount(options: {
   notifier?: false | ((note: OwnerNote) => Promise<void>)
   jobLeadSessionId?: string
   tellMainAgent?: (message: MainAgentMessage) => Promise<string>
+  jobLeadMaxForwardBytes?: number
+  host?: (ctx: Context) => void
 } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
@@ -39,10 +51,14 @@ async function mount(options: {
     const send = options.notifier ?? (async (note: OwnerNote) => { notes.push(note) })
     ctx.provide('ownerNotifier', { send, tellMainAgent: options.tellMainAgent } as never)
   }
-  await ctx.plugin(OwnerRelay, options.jobLeadSessionId === undefined ? {} : { jobLeadSessionId: options.jobLeadSessionId })
+  options.host?.(ctx)
+  await ctx.plugin(OwnerRelay, {
+    ...(options.jobLeadSessionId === undefined ? {} : { jobLeadSessionId: options.jobLeadSessionId }),
+    ...(options.jobLeadMaxForwardBytes === undefined ? {} : { jobLeadMaxForwardBytes: options.jobLeadMaxForwardBytes }),
+  })
   const relay = ctx.ownerRelay
   const emit = (sessionId: string, event: unknown, preset = 'job-lead'): void => {
-    (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId, header: { agentPreset: preset } }, event)
+    (ctx.emit as (...args: unknown[]) => void)('session/event', { id: SessionId(sessionId), header: { agentPreset: preset, cwd: '/original' } }, event)
   }
   return { ctx, relay, notes, logs, emit }
 }
@@ -189,6 +205,186 @@ describe('configured job-lead route', () => {
     expect(unavailable.logs.some(line => line.text.includes('no main-agent notifier'))).toBe(true)
     expect(refused.logs.some(line => line.text.includes('queue closed'))).toBe(true)
     expect(unconfigured.logs.some(line => line.text.includes('could not deliver'))).toBe(false)
+  })
+})
+
+describe('job-lead overflow recovery', () => {
+  const overflow = { kind: 'error', error: { code: 'CONTEXT_WINDOW_EXCEEDED', message: 'different wording' } }
+  const notice = (count: number) => `job-lead 上下文溢出，已换新会话（第 ${count} 次/24h）`
+  const halfHour = 30 * 60_000
+
+  async function fixture({ noDirectory, ...config }: { jobLeadMaxForwardBytes?: number; noDirectory?: boolean } = {}) {
+    const home = await mkdtemp(join(tmpdir(), 'relay-recovery-'))
+    vi.stubEnv('DSH_HOME', home)
+    cleanups.push(async () => { await rm(home, { recursive: true }) })
+    const file = join(home, 'data', 'owner-relay', 'job-lead.json')
+    const profileDir = join(home, 'profiles', 'event')
+    const profile = join(profileDir, 'cordis.patch.yml')
+    await mkdir(profileDir, { recursive: true })
+    await writeFile(profile, 'jobLeadSessionId: seed\n')
+    const told: string[] = []
+    const tellMainAgent = vi.fn(async (message: MainAgentMessage) => { told.push(message.text); return 'main' })
+    const create = vi.fn(async (_request: { cwd: string; agentPreset: string }) => ({ sessionId: SessionId(`new-${create.mock.calls.length}`) }))
+    const prompt = vi.fn(async (_request: { sessionId: string; content: { text: string }[] }) => ({ accepted: true }))
+    const archiveSession = vi.fn<(id: string) => Promise<void>>(async () => {})
+    const close = vi.fn(async () => {})
+    const setup = () => mount({ ...config, jobLeadSessionId: 'seed', tellMainAgent, host: (ctx) => {
+      ctx.provide('sessionController', { create, prompt } as never)
+      ctx.provide('workspaceRegistry', { archiveSession } as never)
+      if (noDirectory !== true) ctx.provide('workingDirectory', { get: () => '/current' } as never)
+      ctx.provide('agents', { get: () => ({ whenIdle: async () => {}, ctx: { fiber: { dispose: close } } }) } as never)
+    } })
+    const h = await setup()
+    const fail = (id: string, reason = overflow) => { h.emit(id, turnEnd(reason)) }
+    return { h, setup, file, profile, told, create, prompt, archiveSession, close, fail, tellMainAgent }
+  }
+
+  it('replaces the active root once, preserves the profile, and restores the new target on remount', async () => {
+    const f = await fixture()
+    f.fail('seed')
+    f.fail('seed')
+    await vi.waitFor(() => expect(f.told).toEqual([notice(1)]))
+    expect(f.create.mock.calls).toEqual([[{ cwd: '/current', agentPreset: 'job-lead' }]])
+    expect(f.archiveSession.mock.calls).toEqual([['seed']])
+    expect(f.prompt).toHaveBeenCalledTimes(1)
+    expect(f.prompt.mock.calls[0]?.[0]).toMatchObject({ sessionId: 'new-1', content: [{ text: expect.stringMatching(/job_repo.*tracker.*issues.*Continue/is) }] })
+    expect(f.h.relay.jobLeadSessionId).toBe('new-1')
+    expect(f.h.notes).toEqual([])
+    expect(await readFile(f.profile, 'utf8')).toBe('jobLeadSessionId: seed\n')
+    expect(await readdir(join(f.file, '..'))).toEqual(['job-lead.json'])
+    expect(JSON.parse(await readFile(f.file, 'utf8'))).toMatchObject({ jobLeadSessionId: 'new-1', resets: [{ oldSessionId: 'seed', reason: 'CONTEXT_WINDOW_EXCEEDED' }] })
+    await f.h.ctx.fiber.dispose()
+    const remounted = await f.setup()
+    expect(remounted.relay.jobLeadSessionId).toBe('new-1')
+    remounted.emit('seed', turnEnd(overflow))
+    await drain()
+    expect(f.create).toHaveBeenCalledTimes(1)
+    expect(f.told).toEqual([notice(1)])
+  })
+
+  it('does not reset on an error message that merely mentions context overflow', async () => {
+    const f = await fixture()
+    f.fail('seed', { kind: 'error', error: { code: 'AUTH', message: 'context overflow' } })
+    await drain()
+    expect(f.create).not.toHaveBeenCalled()
+    expect(f.told).toEqual(['⚠️ 本轮未完成（error）\n原因：AUTH: context overflow'])
+  })
+
+  it('honors the rolling cooldown and reports a saturated window once across remount', async () => {
+    const f = await fixture()
+    const start = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => start)
+    f.fail('seed', { kind: 'error', error: { code: 'context overflow', message: 'legacy code' } })
+    await vi.waitFor(() => expect(f.told).toEqual([notice(1)]))
+    vi.mocked(Date.now).mockReturnValue(start + halfHour - 1)
+    f.fail('new-1')
+    await drain()
+    expect(f.told).toEqual([notice(1)])
+    vi.mocked(Date.now).mockReturnValue(start + halfHour)
+    f.fail('new-1')
+    await vi.waitFor(() => expect(f.told).toEqual([notice(1), notice(2)]))
+    vi.mocked(Date.now).mockReturnValue(start + 2 * halfHour)
+    f.fail('new-2')
+    await vi.waitFor(() => expect(f.told).toEqual([notice(1), notice(2), notice(3)]))
+    f.fail('new-3')
+    f.fail('new-3')
+    await vi.waitFor(() => expect(f.told).toHaveLength(4))
+    expect(f.told[3]).toMatch(/24 小时内已重置 3 次/)
+    expect(f.create).toHaveBeenCalledTimes(3)
+    await f.h.ctx.fiber.dispose()
+    const remounted = await f.setup()
+    remounted.emit('new-3', turnEnd(overflow))
+    await drain()
+    expect(f.told).toHaveLength(4)
+    vi.mocked(Date.now).mockReturnValue(start + 48 * halfHour)
+    remounted.emit('new-3', turnEnd(overflow))
+    await vi.waitFor(() => expect(f.told[4]).toBe(notice(3)))
+    expect(f.create).toHaveBeenCalledTimes(4)
+  })
+
+  it('closes an agent whose non-forced archive would affect schedules and reports the attached IDs', async () => {
+    const f = await fixture()
+    f.archiveSession.mockRejectedValueOnce(new WorkspaceActiveSessionError(SessionId('seed'), [{ kind: 'schedule', items: [{ id: 'task-1', label: 'Recurring work' }] }]))
+    f.fail('seed')
+    await vi.waitFor(() => expect(f.told).toEqual([`${notice(1)}；旧会话仍绑定日程：task-1`]))
+    expect(f.archiveSession.mock.calls).toEqual([['seed']])
+    expect(f.close).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(await readFile(f.file, 'utf8'))).toMatchObject({ poisonedSessionStillscheduled: ['task-1'] })
+  })
+
+  it('reports a failed recovery once per cooldown without forwarding the overflow error', async () => {
+    const told = vi.fn(async (_message: MainAgentMessage) => 'main')
+    const h = await mount({ jobLeadSessionId: 'seed', tellMainAgent: told })
+    await turn(h.emit, 'seed', undefined, overflow)
+    await turn(h.emit, 'seed', undefined, overflow)
+    expect(told).toHaveBeenCalledExactlyOnceWith({ text: 'job-lead 上下文溢出，自动换新会话失败；请查看中继日志。', from: 'job-lead', origin: 'job' })
+    expect(h.notes).toEqual([])
+    expect(h.logs.some(line => line.text.includes('recovery requires a live Agent'))).toBe(true)
+  })
+
+  it('keeps the replacement selected when retiring the writer or queueing its boot fails', async () => {
+    const f = await fixture({ noDirectory: true })
+    f.archiveSession.mockRejectedValueOnce(new Error('archive write failed'))
+    f.close.mockRejectedValueOnce(new Error('writer close failed'))
+    f.prompt.mockRejectedValueOnce(new Error('queue closed'))
+    f.fail('seed')
+    await vi.waitFor(() => expect(f.told).toEqual([`${notice(1)}；旧会话归档或关闭失败，请查看中继日志；启动指令未入队，请查看中继日志`]))
+    expect(f.h.relay.jobLeadSessionId).toBe('new-1')
+    expect(f.create.mock.calls).toEqual([[{ cwd: '/original', agentPreset: 'job-lead' }]])
+    expect(f.h.notes).toEqual([])
+  })
+
+  it('still reports an attached schedule when persisting its ID fails', async () => {
+    const f = await fixture()
+    f.archiveSession.mockImplementationOnce(async () => {
+      await rename(f.file, `${f.file}.saved`)
+      await mkdir(f.file)
+      throw new WorkspaceActiveSessionError(SessionId('seed'), [{ kind: 'turn' }, { kind: 'schedule' }, { kind: 'schedule', items: [{ id: 'task-2', label: 'Owner task' }] }])
+    })
+    f.fail('seed')
+    await vi.waitFor(() => expect(f.told).toEqual([`${notice(1)}；旧会话仍绑定日程：task-2`]))
+    expect(f.h.logs.some(line => line.text.includes('could not record schedules still on Session'))).toBe(true)
+  })
+
+  it('does not use a direct note if a recovery notice cannot reach the main agent', async () => {
+    const f = await fixture()
+    f.tellMainAgent.mockRejectedValueOnce(new Error('queue closed'))
+    f.fail('seed')
+    await vi.waitFor(() => expect(f.h.logs.some(line => line.text.includes('recovery notice for Session new-1 failed'))).toBe(true))
+    expect(f.h.notes).toEqual([])
+  })
+
+  it('rejects unreadable or invalid runtime state instead of reusing an overflowed seed', async () => {
+    const f = await fixture()
+    await mkdir(f.file, { recursive: true })
+    expect(() => readJobLeadState(f.file, SessionId('seed'))).toThrow()
+    const bad = `${f.file}.bad`
+    for (const data of [null, {}, { jobLeadSessionId: '', resets: [] }, { jobLeadSessionId: 'new', resets: null },
+      { jobLeadSessionId: 'new', resets: [null] }, { jobLeadSessionId: 'new', resets: [], limitReported: false },
+      { jobLeadSessionId: 'new', resets: [], poisonedSessionStillscheduled: 'task' },
+      { jobLeadSessionId: 'new', resets: [], poisonedSessionStillscheduled: [0] }]) {
+      await writeFile(bad, JSON.stringify(data))
+      expect(() => readJobLeadState(bad, SessionId('seed'))).toThrow('invalid job-lead state')
+    }
+    await writeFile(bad, JSON.stringify({ jobLeadSessionId: 'new', resets: [], poisonedSessionStillscheduled: ['task'] }))
+    expect(readJobLeadState(bad, SessionId('seed')).poisonedSessionStillscheduled).toEqual(['task'])
+  })
+
+  it('caps forwarded UTF-8 text and errors including exact omitted bytes; it does not forward raw tool events', async () => {
+    const f = await fixture({ jobLeadMaxForwardBytes: 48 })
+    const large = '🐈'.repeat(100)
+    f.h.emit('seed', turnStart)
+    f.h.emit('seed', { type: 'tool/result', seq: 3, data: { content: 'do not forward'.repeat(1_000) } })
+    await turn(f.h.emit, 'seed', large)
+    f.fail('seed', { kind: 'error', error: { code: 'AUTH', message: large } })
+    await drain()
+    expect(f.told[0]).toBe(`${'🐈'.repeat(6)}…[truncated 376 bytes]`)
+    const unbounded = `⚠️ 本轮未完成（error）\n原因：AUTH: ${large}`
+    const match = f.told[1]?.match(/^(.*)…\[truncated (\d+) bytes\]$/s)
+    expect(match).not.toBeNull()
+    expect(Number(match?.[2])).toBe(Buffer.byteLength(unbounded) - Buffer.byteLength(match?.[1] ?? ''))
+    expect(f.told.every(text => Buffer.byteLength(text) <= 48)).toBe(true)
+    expect(f.told).toHaveLength(2)
   })
 })
 

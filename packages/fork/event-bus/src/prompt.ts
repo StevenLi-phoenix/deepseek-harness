@@ -187,13 +187,14 @@ export interface TurnFailureReason {
 /**
  * One-line reason of a failed turn, e.g. `AUTH: 401 User not found.`
  * @param reason - `TurnEndReason` of the turn.
- * @returns `code: message` within 200 characters, or undefined when the turn did not fail with a reason.
+ * @param maxChars - character budget, or infinity when a caller applies its own byte cap. Defaults to 200.
+ * @returns `code: message` within that budget, or undefined when the turn did not fail with a reason.
  */
-export function failureDetail(reason: TurnFailureReason): string | undefined {
+export function failureDetail(reason: TurnFailureReason, maxChars = MAX_FAILURE_CHARS): string | undefined {
   if (reason.kind !== 'error' || reason.error === undefined) return undefined
   const { code, message } = reason.error
   const line = message.replace(/\s+/g, ' ').trim()
-  return clampLabel(line.startsWith(code) ? line : `${code}: ${line}`, MAX_FAILURE_CHARS)
+  return clampLabel(line.startsWith(code) ? line : `${code}: ${line}`, maxChars)
 }
 
 /** Note body: the final text (or its absence), then the failure reason when there is one. */

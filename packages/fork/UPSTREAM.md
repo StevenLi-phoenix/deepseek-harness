@@ -24,6 +24,7 @@ Every edit outside `packages/fork/` and `/fork` is listed here so an upgrade can
 
 | File | Change |
 |---|---|
+| `pnpm-lock.yaml`, `docs/config-catalog.md`, `docs/config-catalog.zh.md`, `packages/extensions/tool-cordis/src/api-catalog.ts` | Owner relay's recovery dependencies and regenerated catalogs for the byte limit and runtime job-lead target. |
 | `packages/core/tools/src/{contracts,index}.ts` | Opt-in `preserveLocal` to mask inherited capabilities without hiding a preset's scoped replacements from its Sessions. |
 | `packages/browser-use/headless-browser/` (`src/{config,form-tools,guard,index,job-apply-network,job-apply,job-snapshots,session}.ts`, `tests/{job-apply,job-apply-careers,job-apply-guard}.spec.ts`, `package.json`, `tsconfig.host.json`), `pnpm-lock.yaml` | Restore host-bound credentials, guarded coordinate and Enter input, Session-only image viewing, mapped uploads, and career surfaces in the job scope. |
 | `packages/browser-use/headless-browser/src/{config,form-tools,guard,index,job-apply-network,job-apply,session,tabs,tools,uploads}.ts`, `tests/job-apply.spec.ts` | Scoped application browser shares sign-ins, fences Session-owned tabs, denies sensitive destinations, narrows guarded application clicks and file attachments, and supplies the trusted live hostname for Gmail verification. |

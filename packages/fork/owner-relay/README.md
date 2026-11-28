@@ -32,7 +32,9 @@ Mount the relay at the profile root before its channels. The event bundle mounts
   name: '@deepseek-ai/dsh-owner-relay'
 ```
 
-Set `config.jobLeadSessionId` in a private profile overlay to reserve one persistent root on the `job-lead` preset. Only its last assistant text is relayed via `ownerNotifier.tellMainAgent`, and a final `NO_REPLY` sends nothing. There is no direct notification or fallback if the main agent cannot be reached. Without an ID, this route is off.
+Set `config.jobLeadSessionId` in a private profile overlay to seed the persistent root on the `job-lead` preset. Only its last assistant text is relayed via `ownerNotifier.tellMainAgent`, and a final `NO_REPLY` sends nothing. There is no direct notification or fallback if the main agent cannot be reached. Without an ID, this route is off. Set `config.jobLeadMaxForwardBytes` to cap each forwarded text (including any failure detail) at a UTF-8 byte limit, 8192 bytes by default; a shortened text ends in `…[truncated N bytes]`. Raw tool results are not forwarded.
+
+When a job-lead turn ends with the structured context-overflow code, the relay switches to a fresh Session in the same directory and preset and sends a brief prompt to continue from the job repo, tracker, and issues. It archives the old Session without deleting or renaming its log; if activity prevents archiving, it closes only the Agent, leaving any schedules attached and reporting their IDs. The profile patch is never edited: the relay atomically saves the current target and reset history in `$DSH_HOME/data/owner-relay/job-lead.json` and reads it at startup ahead of the profile seed. The relay performs at most one reset per 30 minutes and three per rolling 24 hours, and sends each reset notice and the first denial at the daily limit only to the main agent.
 
 ### When to choose it
 
@@ -113,7 +115,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md). Unit tests
 
 #### What the model sees
 
-The relay adds nothing to the Sessions whose answers it relays; it only reads their events. An answer that falls back reaches the owner's WeChat chat Session as a shared note (from `@deepseek-ai/dsh-wechat`), dated with its send time and framed with the channel's `fallbackLabel` instead of the generic other-session wording, so the chat agent knows where a message the owner answers came from.
+Ordinary relaying only reads Session events; only job-lead recovery adds a boot prompt to a fresh Session. An answer that falls back reaches the owner's WeChat chat Session as a shared note (from `@deepseek-ai/dsh-wechat`), dated with its send time and framed with the channel's `fallbackLabel` instead of the generic other-session wording, so the chat agent knows where a message the owner answers came from.
 
 ##### Shared fallback note
 
@@ -128,7 +130,7 @@ At Fri 2026-10-23 19:42 (America/New_York), the Bilibili account's Session (its 
 
 #### Token effect
 
-One shared note per fallback: the answer plus a one-line frame. Relayed answers add nothing to any model context.
+One shared note per fallback: the answer plus a one-line frame. Ordinary replies to channels do not add model context; the job-lead route delivers a bounded text to the main agent.
 
 #### KV Cache effect
 

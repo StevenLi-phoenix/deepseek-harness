@@ -32,7 +32,9 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
   name: '@deepseek-ai/dsh-owner-relay'
 ```
 
-在私有的 profile 叠加配置中设 `config.jobLeadSessionId`，为 `job-lead` 预设下的一个持久根 Session 保留通道。只用 `ownerNotifier.tellMainAgent` 转发该轮最后的 assistant 文本；最后一句是 `NO_REPLY` 就不发。主 agent 接不到时不发送直接通知，也不走退回路径。未配置 ID 时关闭此路由。
+在私有的 profile 叠加配置中设 `config.jobLeadSessionId`，为 `job-lead` 路由指定初始根 Session。只用 `ownerNotifier.tellMainAgent` 转发该轮最后的 assistant 文本；最后一句是 `NO_REPLY` 就不发。主 agent 接不到时不发送直接通知，也不走退回路径。未配置 ID 时关闭此路由。`config.jobLeadMaxForwardBytes` 限制每条转发文本（含失败详情）的 UTF-8 字节数，默认 8192 字节，截断后以 `…[truncated N bytes]` 结尾；工具原始结果不转发。
+
+若 job-lead 回合以结构化的上下文溢出错误码结束，中继会切换到相同目录、相同预设的新 Session，并用一条短提示从求职仓库、tracker 和 issues 继续。旧 Session 归档时不会删除或改名日志；若有活动阻止归档，只关闭 Agent，不改变日程并报告仍绑定的日程 ID。中继不编辑 profile patch，而是将当前目标和重置记录原子写入 `$DSH_HOME/data/owner-relay/job-lead.json`，启动时优先于初始 ID 读取。每 30 分钟最多重置一次，滚动 24 小时最多三次，每次重置和首次触及日限额的拒绝只通知主 agent。
 
 ### 何时选用
 
@@ -113,7 +115,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 #### 模型看到的内容
 
-中继不往它转发回答的 Session 里加任何内容，只读取它们的事件。退回的回答作为一条共享通知（来自 `@deepseek-ai/dsh-wechat`）进入主人的微信对话 Session，带有发出时间，开头用通道的 `fallbackLabel` 代替笼统的“另一个 session”说法，让对话 agent 知道主人回复的那条消息来自哪里。
+普通转发只读取 Session 事件；只有 job-lead 恢复时才给新 Session 发启动提示。退回的回答作为一条共享通知（来自 `@deepseek-ai/dsh-wechat`）进入主人的微信对话 Session，带有发出时间，开头用通道的 `fallbackLabel` 代替笼统的“另一个 session”说法，让对话 agent 知道主人回复的那条消息来自哪里。
 
 ##### 共享的退回通知
 
@@ -128,7 +130,7 @@ At Fri 2026-10-23 19:42 (America/New_York), the Bilibili account's Session (its 
 
 #### Token 影响
 
-每次退回一条共享通知：回答本身加一行开头。正常转发的回答不会进入任何模型上下文。
+每次退回一条共享通知：回答本身加一行开头。一般通道回复不进入模型上下文；job-lead 的转发文本有长度上限，只进入主 agent。
 
 #### KV Cache 影响
 

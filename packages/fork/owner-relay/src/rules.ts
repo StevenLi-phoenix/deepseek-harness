@@ -41,6 +41,26 @@ export type RelayDecision =
 export const RELAY_FALLBACK_TITLE = '↪️ 这条回答没能从原渠道发出，改发这里'
 
 /**
+ * Cap a forwarded UTF-8 field without splitting a character or dropping the marker.
+ * @param text - original field.
+ * @param limit - inclusive byte budget, at least 32 bytes.
+ * @returns The original field or a prefix and the exact omitted byte count.
+ */
+export function truncateForwardedText(text: string, limit: number): string {
+  const size = Buffer.byteLength(text)
+  if (size <= limit) return text
+  const bytes = Buffer.from(text)
+  let end = limit
+  for (;;) {
+    while ((bytes.readUInt8(end) & 0xc0) === 0x80) end -= 1
+    const marker = `…[truncated ${size - end} bytes]`
+    const room = limit - Buffer.byteLength(marker)
+    if (end <= room) return bytes.toString('utf8', 0, end) + marker
+    end = room
+  }
+}
+
+/**
  * Concatenated text parts of one message content.
  * @param content - content parts of an assistant message.
  * @returns the joined, trimmed text, or undefined when it has none.
@@ -71,9 +91,10 @@ export function stoppedByOwner(reason: TurnEndFacts): boolean {
  * out, so a report followed by `NO_REPLY` still goes out.
  * @param texts - the turn's assistant message texts, oldest first.
  * @param reason - how the turn ended.
+ * @param maxFailureChars - failure detail character budget; defaults to the shared short detail.
  * @returns nothing (and why), or the message with the turn's outcome and failure reason.
  */
-export function decideRelay(texts: readonly string[], reason: TurnEndFacts): RelayDecision {
+export function decideRelay(texts: readonly string[], reason: TurnEndFacts, maxFailureChars?: number): RelayDecision {
   if (stoppedByOwner(reason)) return { kind: 'stopped' }
   const parts = texts.filter(part => !isSilentReply(part))
   if (texts.length > 0 && parts.length === 0) return { kind: 'silent' }
@@ -82,7 +103,7 @@ export function decideRelay(texts: readonly string[], reason: TurnEndFacts): Rel
   if (outcome === 'completed') {
     return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome, ...(parts.length > 1 ? { parts } : {}) }
   }
-  const detail = failureDetail(reason)
+  const detail = failureDetail(reason, maxFailureChars)
   const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
   // The warning goes under the last message, so a channel that sends the messages one by one adds no extra one.
   const sent = parts.length === 0 ? [warning] : [...parts.slice(0, -1), `${parts.at(-1)}\n\n${warning}`]

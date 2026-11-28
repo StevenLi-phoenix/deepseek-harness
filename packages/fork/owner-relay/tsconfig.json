@@ -12,10 +12,34 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../event-bus"
+      "path": "../../api/session-controller/tsconfig.host.json"
     },
     {
       "path": "../../core/session"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../schedule/schedule"
+    },
+    {
+      "path": "../../session/working-directory"
+    },
+    {
+      "path": "../../util/atomic-write"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../workspace/workspace"
+    },
+    {
+      "path": "../event-bus"
+    },
+    {
+      "path": "../turn-taint"
     }
   ]
 }
