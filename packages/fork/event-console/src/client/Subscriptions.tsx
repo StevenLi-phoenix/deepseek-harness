@@ -242,6 +242,9 @@ function CreateForm({ defaults, busy, t, onCreate, onClose }: {
 /** time-gap's row: its settings (threshold, zone, excluded presets) are edited at the foot of this page. */
 export const TIME_GAP_CONFIG_ENTRIES = ['time-gap'] as const
 
+/** notify-learning's root row: learning on or off, the nightly hour, the reaction window, and the thresholds. */
+export const NOTIFY_LEARNING_CONFIG_ENTRIES = ['notify-learning'] as const
+
 /**
  * Render the Subscriptions and monitors section.
  * @param props - the store hook, callbacks, and copy.
@@ -327,6 +330,12 @@ export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, 
       </div>
       <span className={css.hint}>{translate('subs.timeGap.hint')}</span>
       {renderFactorySlot?.('settings.plugin-config', { entries: TIME_GAP_CONFIG_ENTRIES })}
+
+      <div className={css.heading}>
+        <span className={css.headingTitle}>{translate('subs.notifyLearning.title')}</span>
+      </div>
+      <span className={css.hint}>{translate('subs.notifyLearning.hint')}</span>
+      {renderFactorySlot?.('settings.plugin-config', { entries: NOTIFY_LEARNING_CONFIG_ENTRIES })}
     </section>
   )
 }

@@ -18,6 +18,7 @@ agent 会主动告诉 owner 一些事：通知台转来的通知、提醒、监�
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -188,3 +189,16 @@ Answer with only a JSON object: {"signals":[{"exchange":"x…","kind":"…","dec
 - **没有评估**——规则只对照 owner 的原话核对，不对照之后的反应；学错的规则一直保留，直到相反的规则替换它或 owner 删掉它。
 - **规则只是建议**——规则块告诉模型怎么做；代码不会扣下规则说不用发的消息，所以 owner 仍可能收到。
 - **窗口内的 owner 回合都算反应**——窗口内 owner 的每个回合都会附上，包括说别的事的；模型被要求不为这些给出信号，代码只核对引用确实是 owner 的话。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- 设计参考了对 simplexai-labs/linger 的审阅：它每晚学习偏好，但 owner 看不到、删不掉，也不核对学到的偏好是否出自 owner 自己的话；这个包保留夜间学习，补上这三点。
+- 之后可以在代码里扣下 `silent` 规则覆盖的消息，而不是交给模型；这需要模型之外的类别分类器，并另行审阅。
+
+</details>

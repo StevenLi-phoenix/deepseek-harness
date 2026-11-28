@@ -18,6 +18,7 @@ The agent tells the owner things on its own: notes from the notification desk, r
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -188,3 +189,16 @@ Independent request: it shares no prefix with any Session, and its system prompt
 - **No evaluation** — a rule is checked against the owner's quotes, not against later reactions; one that turns out wrong stays until a contrary rule replaces it or the owner deletes it.
 - **Rules are advice** — the block tells the model what to do; code does not hold back a message a rule silences, so the owner can still receive one.
 - **Owner turns read as reactions** — every owner turn in the window is attached, including ones about something else; the model is told to give no signal for them, and code only checks that a quote is the owner's.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- The design follows a review of simplexai-labs/linger, whose nightly preference learning has no owner view, no deletion, and no check that a learned preference rests on the owner's own words; this package keeps the nightly learning and adds those three.
+- A later step could hold back, in code, a message a `silent` rule covers, instead of leaving it to the model; that needs a classifier of kinds outside the model and its own review.
+
+</details>

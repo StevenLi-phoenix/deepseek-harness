@@ -12,8 +12,8 @@
   en: 9125a69e277155a9
   zh: 0e73428cdce53ff2
 /deepseek-ai-dsh-notify-learning/table-of-contents:
-  en: b563e4ec4727d0de
-  zh: bd4ef01ceedb8324
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-notify-learning/use-this-package:
   en: 0f9de0623b308ac4
   zh: 955768c18f3878e0
@@ -78,5 +78,8 @@
   en: e0ec1221adeef650
   zh: 88e0c6e621866822
 /deepseek-ai-dsh-notify-learning/known-limitations-and-deferred-work:
-  en: 23ffe7a41c74f4ea
-  zh: 14e006be69436ad8
+  en: 13b3be3503529608
+  zh: 9c2c1ebaa7815454
+/deepseek-ai-dsh-notify-learning/known-limitations-and-deferred-work/dev-note:
+  en: 0741c619f347d50c
+  zh: 60cd3a21d78e3e98

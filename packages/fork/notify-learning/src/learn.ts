@@ -127,7 +127,11 @@ export function parseSignals(text: string): Array<Signal | undefined> {
   })
 }
 
-/** Text with runs of whitespace collapsed to one space, trimmed. */
+/**
+ * Text with runs of whitespace collapsed to one space, trimmed.
+ * @param text - the text.
+ * @returns the collapsed text.
+ */
 export function collapse(text: string): string {
   return text.replaceAll(/\s+/gu, ' ').trim()
 }
