@@ -150,6 +150,29 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await page.locator('#resume').isChecked()).toBe(true)
   }, 120_000)
 
+  it('checks a box whose label is click-through by clicking the paragraph over it at the box, from the box or its label', async () => {
+    // Live apply.deshaw.com step 1, 2026-11-27 20:00 run: the input and its label scored pointerEvents 0 and the
+    // label's <p> covered the input. The link sits at the paragraph's centre, so a click there would miss the box.
+    const app = await boot()
+    await load(app, [
+      '<div class="confirmation-HTML checkbox-list" style="width:480px">',
+      '<label id="ack" class="checkbox-root-label" style="pointer-events:none;position:relative;display:block">',
+      '<span style="position:absolute;left:0;top:0"><input type="checkbox" id="confirm" name="Confirm" aria-required="true"',
+      ' style="margin:0;width:16px;height:16px"></span>',
+      '<p style="pointer-events:auto;position:relative;margin:0;height:40px">Click the checkbox to indicate your acknowledgment',
+      '<a href="#privacy" onclick="document.title=\'notice\';return false"',
+      ' style="position:absolute;left:160px;top:12px;width:160px;height:16px">Privacy Notice</a></p></label></div>',
+    ].join(''))
+    const page = await app.browser.page()
+    const byBox = await app.browser.click({ selector: '#confirm' })
+    expect(byBox.target).toMatchObject({ ref: '#confirm', index: 1 })
+    expect(await page.locator('#confirm').isChecked()).toBe(true)
+    const byLabel = await app.browser.click({ selector: '#ack' })
+    expect(byLabel.target).toMatchObject({ ref: '#ack', index: 1 })
+    expect(await page.locator('#confirm').isChecked()).toBe(false)
+    expect(await page.title()).not.toBe('notice')
+  }, 120_000)
+
   it('clicks a LinkedIn card title whose only text is an aria-hidden span wrapped over two lines', async () => {
     // Live linkedin.com/jobs/search-results, 2026-11-26 18:30 run: `text=<title>` matched only the aria-hidden span
     // and was refused at ariaHidden=0, occlusion=0.6, "covered" by the title <p> that holds it.

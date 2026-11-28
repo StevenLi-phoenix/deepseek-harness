@@ -22,7 +22,7 @@ const ATS_ALIASES: readonly (readonly string[])[] = [
 /**
  * Enterprise ATS sites whose tenants mail candidates from the employer's own domain: Tenet's Oracle Cloud HCM page at
  * eodr.fa.us2.oraclecloud.com sent its code from tenethealth.com (2026-11-27). There the sender may be a domain the
- * caller's own page links to (that page links www.tenethealth.com 14 times).
+ * caller's open pages on that host link to: the posting page links www.tenethealth.com, the application step does not.
  */
 const EMPLOYER_MAIL_ATS = new Set(['oraclecloud.com', 'taleo.net'])
 
@@ -105,15 +105,30 @@ async function liveHost(browser: JobApplyBrowser | undefined, sessionId: string 
 async function vouchedEmployer(
   browser: JobApplyBrowser, sessionId: string, site: string, sender: string, signal: AbortSignal,
 ): Promise<boolean> {
-  if (!EMPLOYER_MAIL_ATS.has(site) || UNVOUCHED_DOMAINS.has(sender) || browser.linkedHosts === undefined || signal.aborted) return false
+  if (!vouchingSite(browser, site, sender) || signal.aborted) return false
   try {
-    const hosts = await browser.linkedHosts(sessionId, signal)
+    const hosts = await browser.linkedHosts?.(sessionId, signal) ?? []
     return hosts.some(host => registrable(browser, host) === sender)
   } catch {
     // A page that cannot be read vouches for nothing.
     return false
   }
 }
+
+/**
+ * @param browser - the preset's browser bridge.
+ * @param site - the registrable domain of the caller's tab.
+ * @param sender - the requested sender's registrable domain.
+ * @returns whether an open page of that site could vouch for that sender.
+ */
+function vouchingSite(browser: JobApplyBrowser, site: string, sender: string): boolean {
+  return EMPLOYER_MAIL_ATS.has(site) && !UNVOUCHED_DOMAINS.has(sender) && browser.linkedHosts !== undefined
+}
+
+/** What a worker does when the application step of an Oracle or Taleo site links nowhere. */
+const VOUCH_HINT = 'No page of this site open in your tabs links to that sender domain. Open the job\'s posting page on '
+  + 'this same site in a second tab with headless_browser_open (it links to the employer\'s own website), keep the '
+  + 'application tab open, then call gmail_verification_code again without requesting another code.'
 
 function registrable(browser: JobApplyBrowser, value: unknown): string | null {
   const host = normalizeHost(value)
@@ -144,7 +159,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
   }))
   ctx.tools.register(defineTool({
     name: 'gmail_verification_code',
-    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched; on Oracle Cloud HCM or Taleo it may also be the employer domain the page links to. Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
+    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched; on Oracle Cloud HCM or Taleo it may also be the employer domain that one of your open pages on that host links to (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
     parameters: {
       account: { type: 'string', required: true, description: 'Account id from gmail_accounts.' },
       sender_domain: { type: 'string', required: true, description: 'Expected sender domain, not a URL or email address.' },
@@ -164,7 +179,11 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
       const sender = registrable(browser, input.sender_domain)
       if (site === null || sender === null) return mismatch()
       const vouched = !sameSite(site, sender) && await vouchedEmployer(browser, sessionId, site, sender, exec.signal)
-      if (!sameSite(site, sender) && !vouched) return mismatch()
+      if (!sameSite(site, sender) && !vouched) {
+        if (!vouchingSite(browser, site, sender)) return mismatch()
+        ctx.logger.warn('tool-gmail: gmail_verification_code domain_mismatch: no open %s page links to %s', before, sender)
+        return { ...NO_CODE, error: 'domain_mismatch', hint: VOUCH_HINT }
+      }
       if (sensitive(before) || sensitive(site) || sensitive(input.sender_domain) || sensitive(sender)) {
         ctx.logger.warn('tool-gmail: gmail_verification_code sensitive_sender')
         return { ...NO_CODE, error: 'sensitive_sender' }

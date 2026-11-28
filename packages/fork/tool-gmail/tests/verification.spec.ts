@@ -169,7 +169,6 @@ describe('verification-only mode', () => {
   })
 
   it.each([
-    ['eodr.fa.us2.oraclecloud.com', 'other.example', ['www.tenethealth.com']],
     ['eodr.fa.us2.oraclecloud.com', 'linkedin.com', ['www.linkedin.com']],
     ['eodr.fa.us2.oraclecloud.com', 'myworkday.com', ['www.myworkday.com']],
     ['tenant.wd1.myworkdayjobs.com', 'employer.example', ['www.employer.example']],
@@ -178,6 +177,15 @@ describe('verification-only mode', () => {
     const h = await mount(host, true, 'verification-only', links)
     expect((await h.invoke({ ...ARGS, sender_domain })).value).toEqual(MISMATCH)
     expect(h.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('tells the caller to open the posting page when no open Oracle page links to the employer sender', async () => {
+    // Tenet's application step at eodr.fa.us2.oraclecloud.com links only doleta.gov and uscis.gov (2026-11-27 20:14).
+    const h = await mount('eodr.fa.us2.oraclecloud.com', true, 'verification-only', ['www.doleta.gov', 'www.uscis.gov'])
+    const value = (await h.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value as Record<string, unknown>
+    expect(value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') })
+    expect(h.gmail.verificationCode).not.toHaveBeenCalled()
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code domain_mismatch: no open %s page links to %s')
   })
 
   it('returns only the trusted link and rejects unrelated or sensitive link hosts', async () => {

@@ -266,3 +266,52 @@ it.skipIf(!existsSync(chromium.executablePath()))('keeps a working Session’s p
     rmSync(root, { force: true, recursive: true })
   }
 }, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('reads employer links from every tab a Session has on its current host, and from no other host', async () => {
+  // Tenet's Oracle application step links nowhere; its posting page on the same host links the employer (2026-11-27).
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-links-'))
+  const infos: string[] = []
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html')
+    if (req.url === '/job/1') { res.end('<title>Posting</title><a href="https://www.employer.example/">Employer</a>'); return }
+    if (req.url === '/elsewhere') { res.end('<title>Other site</title><a href="https://www.decoy.example/">Decoy</a>'); return }
+    res.end('<title>Confirm your identity</title><input id="email">')
+  })
+  let browser: HeadlessBrowserSession | undefined
+  let clock = 1_000_000
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    const ats = `http://eodr.example.test:${bound.port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      now: () => clock,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    const apply = await as('a', async () => await active.open(`${ats}/job/1/apply/email`, true))
+    expect(await active.currentJobLinkHosts('a')).toEqual([])
+    await as('a', async () => await active.open(`${ats}/job/1`, true))
+    clock += 1_000
+    await as('a', async () => await active.read({}, apply.tab))
+    expect(await active.currentJobHost('a')).toBe('eodr.example.test')
+    expect(await active.currentJobLinkHosts('a')).toEqual(['www.employer.example'])
+    expect(infos).toContain('headless-browser: read links of %d tabs on %s for a job-apply Session 2 eodr.example.test')
+    await as('a', async () => await active.open(`http://other.example.test:${bound.port}/elsewhere`, true))
+    clock += 1_000
+    await as('a', async () => await active.read({}, apply.tab))
+    expect(await active.currentJobLinkHosts('a')).toEqual(['www.employer.example'])
+    expect(await active.currentJobLinkHosts('b')).toEqual([])
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)

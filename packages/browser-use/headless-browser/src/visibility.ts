@@ -458,16 +458,23 @@ export function findSameNameCover(element: Element): Element | null {
  * painted `<label>`, or else the nearest painted ancestor (four levels up at
  * most) whose label or text is the input's accessible name and that holds no
  * other control; nothing otherwise, so a hidden decoy beside other controls
- * stays refused. The stand-in is scored and name-checked like any target.
+ * stays refused. A label the page makes click-through (`pointer-events: none`)
+ * toggles its control when a click lands on a part of it that takes pointer
+ * events: D. E. Shaw's privacy acknowledgment lays such a `<p>` over the native
+ * box, so the part at the box's centre stands in, clicked there through
+ * {@link findToggleAim}. A label target stands for its checkbox or radio. The
+ * stand-in is scored and name-checked like any target.
  * Playwright serialises this function, so it must not reference anything
  * outside itself; run it after {@link probeElement}, which scrolled the element
  * into view.
- * @param element - the hidden checkbox or radio.
+ * @param target - the hidden checkbox or radio, or its label.
  * @returns the element a person's click reaches, or `null`.
  */
-export function findToggleStandIn(element: Element): Element | null {
-  const view = element.ownerDocument.defaultView
-  if (view === null || !(element instanceof view.HTMLInputElement)) return null
+export function findToggleStandIn(target: Element): Element | null {
+  const view = target.ownerDocument.defaultView
+  if (view === null) return null
+  const element = target instanceof view.HTMLLabelElement ? target.control : target
+  if (!(element instanceof view.HTMLInputElement)) return null
   if (element.type !== 'checkbox' && element.type !== 'radio') return null
   const fold = (text: string): string => text.replace(/\s+/gu, ' ').trim().toLowerCase()
   const painted = (node: Element): boolean => {
@@ -482,13 +489,22 @@ export function findToggleStandIn(element: Element): Element | null {
     }
     return opacity > 0.05
   }
+  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
   const labels = Array.from(element.labels ?? [])
   const label = labels.find(painted)
-  if (label !== undefined) return label
+  // A painted label the guard already scored low gains nothing from standing in for itself.
+  if (label !== undefined) return label === target ? null : label
+  const box = element.getBoundingClientRect()
+  const hit = box.width * box.height > 0 && typeof element.ownerDocument.elementFromPoint === 'function'
+    ? element.ownerDocument.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+    : null
+  // The part must sit inside the box's own label and outside any other control, such as a privacy-notice link.
+  const ownPart = hit !== null && hit !== element && labels.some(owner => owner !== hit && owner.contains(hit))
+    && painted(hit) && hit.closest(CONTROLS) === null
+  if (ownPart) return hit
   const name = fold(element.getAttribute('aria-label') ?? labels.map(node => node.textContent).join(' '))
   if (name === '') return null
   const nameOf = (node: Element): string => fold(node.getAttribute('aria-label') ?? node.textContent)
-  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
   let node = element.parentElement
   for (let depth = 0; node !== null && depth < 4 && node !== element.ownerDocument.body; depth += 1, node = node.parentElement) {
     // A wider ancestor holds the same other control, so the climb stops at the first one.
@@ -496,6 +512,49 @@ export function findToggleStandIn(element: Element): Element | null {
     if (painted(node) && nameOf(node) === name) return node
   }
   return null
+}
+
+/**
+ * Where to click the part of a click-through label that {@link findToggleStandIn}
+ * returned for a checkbox or radio: the native box's centre, relative to that
+ * part, because the part's own centre can be a link inside it. Repeats that
+ * function's covering-part test, so it answers only when the part is the
+ * stand-in; nothing otherwise, and the stand-in is clicked at its centre.
+ * Playwright serialises this function, so it must not reference anything
+ * outside itself.
+ * @param target - the hidden checkbox or radio, or its label.
+ * @returns the click position inside the stand-in, or `null`.
+ */
+export function findToggleAim(target: Element): { readonly x: number; readonly y: number } | null {
+  const view = target.ownerDocument.defaultView
+  if (view === null) return null
+  const element = target instanceof view.HTMLLabelElement ? target.control : target
+  if (!(element instanceof view.HTMLInputElement) || (element.type !== 'checkbox' && element.type !== 'radio')) return null
+  // oxlint-disable-next-line sonarjs/no-identical-functions -- Playwright serialises each function alone, so the paint test repeats
+  const painted = (node: Element): boolean => {
+    const box = node.getBoundingClientRect()
+    if (box.width * box.height <= 0) return false
+    const style = view.getComputedStyle(node)
+    if (style.visibility !== 'visible' || style.pointerEvents === 'none') return false
+    let opacity = 1
+    for (let current: Element | null = node; current !== null; current = current.parentElement) {
+      const value = Number.parseFloat(view.getComputedStyle(current).opacity)
+      if (Number.isFinite(value)) opacity *= value
+    }
+    return opacity > 0.05
+  }
+  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
+  const labels = Array.from(element.labels ?? [])
+  if (labels.some(painted)) return null
+  const box = element.getBoundingClientRect()
+  if (box.width * box.height <= 0 || typeof element.ownerDocument.elementFromPoint !== 'function') return null
+  const x = box.left + box.width / 2
+  const y = box.top + box.height / 2
+  const hit = element.ownerDocument.elementFromPoint(x, y)
+  if (hit === null || hit === element || !labels.some(owner => owner !== hit && owner.contains(hit))) return null
+  if (!painted(hit) || hit.closest(CONTROLS) !== null) return null
+  const part = hit.getBoundingClientRect()
+  return { x: x - part.left, y: y - part.top }
 }
 
 /**

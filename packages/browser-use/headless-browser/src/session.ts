@@ -35,7 +35,7 @@ import { JobSnapshots } from './job-snapshots.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import type { TabStore } from './tab-store.ts'
 import { BrowserTabs, MAX_TABS, ResumeTabError, TabLimitError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
-import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleAim, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -311,12 +311,46 @@ interface Resolution {
   readonly facts: readonly ElementFacts[]
   /** The candidate at one index, ready to act on. */
   readonly element: (index: number) => Actionable
+  /** Where inside that candidate a click lands, when not at its centre. */
+  readonly aim?: (index: number) => ClickPoint | undefined
   /** The accessibility id that resolved to nothing, when it did. */
   readonly staleAxId?: string
   /** URL of the document the candidates are in: the page, or the embedded page that held the selector's matches. */
   readonly url: string
   /** Where follow-up lookups for the same element run, such as a dropdown's options: the page or that embedded page. */
   readonly scope: Page | Frame
+}
+
+/**
+ * @param page - a job page.
+ * @returns distinct http(s) hostnames of the main frame's first 500 anchors, or none when the page does not answer
+ *   within {@link JOB_LINK_READ_MS}.
+ */
+async function linkHosts(page: Page): Promise<string[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<string[]>((resolve) => { timer = setTimeout(() => { resolve([]) }, JOB_LINK_READ_MS) })
+  const read = page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), anchor => String((anchor as HTMLAnchorElement).href)).slice(0, 500))
+    .catch((): string[] => [])
+  try {
+    const hosts = new Set<string>()
+    for (const href of await Promise.race([read, late])) {
+      try {
+        const url = new URL(href)
+        if (url.protocol === 'https:' || url.protocol === 'http:') hosts.add(url.hostname)
+      } catch {
+        // A page's malformed href names no host.
+      }
+    }
+    return [...hosts]
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** A click position inside an element, in CSS pixels from its top-left corner. */
+interface ClickPoint {
+  readonly x: number
+  readonly y: number
 }
 
 /** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
@@ -522,34 +556,24 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Hosts the caller's current job page links to, so an enterprise ATS page can vouch for its employer's mail domain.
+   * Hosts the caller's pages on its current job site link to, so an enterprise ATS can vouch for its employer's mail
+   * domain: Tenet's Oracle application step links nowhere, while its posting page on the same host links
+   * www.tenethealth.com.
    * @param session - trusted identity of the calling Session.
    * @param signal - cancellation of the verification request.
-   * @returns distinct http(s) link hostnames of the page's main frame, from at most 500 anchors; empty when unknown.
+   * @returns distinct http(s) link hostnames from the main frames of the caller's tabs on its current tab's host, at
+   *   most 500 anchors each, current tab first; empty when unknown.
    */
   async currentJobLinkHosts(session: string, signal?: AbortSignal): Promise<string[]> {
     signal?.throwIfAborted()
-    const page = await this.#currentJobPage(session)
-    if (page === null) return []
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const late = new Promise<string[]>((resolve) => { timer = setTimeout(() => { resolve([]) }, JOB_LINK_READ_MS) })
-    const read = page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), anchor => String((anchor as HTMLAnchorElement).href)).slice(0, 500))
-      .catch((): string[] => [])
-    try {
-      const hrefs = await Promise.race([read, late])
-      const hosts = new Set<string>()
-      for (const href of hrefs) {
-        try {
-          const url = new URL(href)
-          if (url.protocol === 'https:' || url.protocol === 'http:') hosts.add(url.hostname)
-        } catch {
-          // A page's malformed href names no host.
-        }
-      }
-      return [...hosts]
-    } finally {
-      clearTimeout(timer)
+    const pages = await this.#currentJobSitePages(session)
+    const hosts = new Set<string>()
+    for (const page of pages) {
+      if (signal?.aborted === true) break
+      for (const host of await linkHosts(page)) hosts.add(host)
     }
+    if (pages.length > 1) this.#log.info('headless-browser: read links of %d tabs on %s for a job-apply Session', pages.length, safeHost(pages[0]?.url() ?? ''))
+    return [...hosts]
   }
 
   /**
@@ -558,14 +582,47 @@ export class HeadlessBrowserSession {
    * @returns that tab's live, protected, admitted page, or null.
    */
   async #currentJobPage(session: string): Promise<Page | null> {
+    const [tab] = this.#ownedJobTabs(session)
+    return tab === undefined ? null : await this.#admittedJobPage(tab)
+  }
+
+  /**
+   * @param session - trusted identity of the calling Session.
+   * @returns the caller's current page, then its other live, admitted pages on the same host.
+   */
+  async #currentJobSitePages(session: string): Promise<Page[]> {
+    const [current, ...rest] = this.#ownedJobTabs(session)
+    const page = current === undefined ? null : await this.#admittedJobPage(current)
+    if (page === null) return []
+    const host = safeHost(page.url())
+    const pages = [page]
+    for (const tab of rest) {
+      const other = await this.#admittedJobPage(tab)
+      if (other !== null && safeHost(other.url()) === host) pages.push(other)
+    }
+    return pages
+  }
+
+  /**
+   * @param session - trusted identity of the calling Session.
+   * @returns ids of the tabs the caller owns, most recently used first, the active tab breaking ties.
+   */
+  #ownedJobTabs(session: string): string[] {
     const tabs = this.#tabs
-    if (tabs === undefined) return null
+    if (tabs === undefined) return []
     const owner = JOB_OWNER_PREFIX + session
-    const tab = this.tabsState()
+    return this.tabsState()
       .filter(entry => tabs.owner(entry.id) === owner)
-      .sort((a, b) => (this.#jobTabUse.get(b.id) ?? 0) - (this.#jobTabUse.get(a.id) ?? 0) || Number(b.active) - Number(a.active))[0]
-    if (tab === undefined) return null
-    const page = await tabs.page(tab.id)
+      .sort((a, b) => (this.#jobTabUse.get(b.id) ?? 0) - (this.#jobTabUse.get(a.id) ?? 0) || Number(b.active) - Number(a.active))
+      .map(entry => entry.id)
+  }
+
+  /**
+   * @param tab - a live tab id.
+   * @returns the tab's page while it is open, protected, and on an admitted URL, or null.
+   */
+  async #admittedJobPage(tab: string): Promise<Page | null> {
+    const page = await this.tabs().page(tab)
     return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(page.url()) ? null : page
   }
 
@@ -1020,7 +1077,9 @@ export class HeadlessBrowserSession {
       this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const mark = this.#downloads.mark()
       const popupMark = this.tabs().popupMark()
-      await this.#clickOn(page, async () => { await resolution.element(target.index).click() })
+      const position = resolution.aim?.(target.index)
+      const options = position === undefined ? undefined : { position }
+      await this.#clickOn(page, async () => { await resolution.element(target.index).click(options) })
       this.#activeGuard().anchor(page.url())
       this.#assertJobUrl(page.url())
       return { url: page.url(), target, ...await this.#openedSince(mark, popupMark) }
@@ -1495,18 +1554,21 @@ export class HeadlessBrowserSession {
       this.#log.info('headless-browser: %s matches nothing on %s; acting in its embedded page %s', selector, pageOrigin(page.url()), pageOrigin(frame.url()))
     }
     const facts: ElementFacts[] = []
-    const covers: { readonly facts: ElementFacts; readonly element: Actionable }[] = []
+    const covers: { readonly facts: ElementFacts; readonly element: Actionable; readonly aim?: ClickPoint }[] = []
     for (let index = 0; index < count; index += 1) {
       const candidate = readElementFacts(await locator.nth(index).evaluate(probeElement))
       facts.push(candidate)
-      if (candidate.tag === 'input' && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
+      if ((candidate.tag === 'input' || candidate.tag === 'label') && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
         // A checkbox or radio the page draws itself hides the native input; its label or same-name box is what a person clicks.
         const standIn = (await locator.nth(index).evaluateHandle(findToggleStandIn)).asElement()
         if (standIn !== null) {
           const standInFacts = readElementFacts(await standIn.evaluate(probeElement))
+          // A part of a click-through label is clicked where the box is, clear of any link inside it.
+          const aim = await locator.nth(index).evaluate(findToggleAim) ?? undefined
           this.#log.info('headless-browser: %s match %d is a hidden %s; scoring the %s named %s that stands in for it',
             selector, index, candidate.role ?? 'toggle', standInFacts.tag, JSON.stringify(standInFacts.name))
-          covers.push({ facts: standInFacts, element: standIn })
+          if (aim !== undefined) this.#log.info('headless-browser: %s match %d: its stand-in is clicked over the native box', selector, index)
+          covers.push({ facts: standInFacts, element: standIn, ...aim === undefined ? {} : { aim } })
           continue
         }
       }
@@ -1541,6 +1603,7 @@ export class HeadlessBrowserSession {
         if (cover === undefined) throw new Error(`${selector} has no candidate ${String(index)}`)
         return cover.element
       },
+      aim: index => covers[index - count]?.aim,
     }
   }
 
