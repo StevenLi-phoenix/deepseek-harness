@@ -356,8 +356,11 @@ export function probeElement(element: Element): ElementFacts {
   // A label's text under its own transparent input (Eightfold's radios at careers.qualcomm.com): a click there
   // reaches the input, which is what a click on the label does, so that hit counts as reaching the label.
   const ownControl = element.closest('label')?.control ?? null
+  // A hit test walks the flat tree, where slotted light DOM renders inside its slot: SmartRecruiters slots each
+  // option's text into its role=option through an spl-tooltip, so a hit on that text reaches the option.
+  const flatParentOf = (node: Element): Element | null => node.assignedSlot ?? parentOf(node)
   const reaches = (hit: Element): boolean => {
-    for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    for (let node: Element | null = hit; node !== null; node = flatParentOf(node)) if (node === element) return true
     if (ownControl !== null && hit === ownControl) return true
     for (let node: Element | null = element; node !== null; node = parentOf(node)) {
       const nodeRoot = node.getRootNode()
@@ -382,7 +385,7 @@ export function probeElement(element: Element): ElementFacts {
   // Playwright refuses a click whose point another element takes, even the label's own input, so a label's text under
   // that input is clicked at the point nearest its centre where the text itself is on top.
   const onElement = (hit: Element | null): boolean => {
-    for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    for (let node: Element | null = hit; node !== null; node = flatParentOf(node)) if (node === element) return true
     return false
   }
   let labelAim: { readonly x: number; readonly y: number } | undefined

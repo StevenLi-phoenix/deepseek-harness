@@ -84,6 +84,7 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
       <label>Search schools<input id="search" onkeydown="if(event.key==='Enter') output.textContent='Search '+this.value"></label>
       <a href="https://www.employer.example/about">About the employer</a><a href="mailto:jobs@employer.example">Mail</a>
       <a id="section" href="javascript:void(0)" onclick="output.textContent='Section'">Application Questions</a>
+      <form id="contact" action="javascript:void(0)" onsubmit="output.textContent='Saved'; return false"><button id="save">Save</button></form>
       <button id="safe" onclick="output.textContent='Allowed'">Review and Submit</button>
       <button id="pay" aria-label="Pay $25 application fee" onclick="output.textContent='Unexpected'">$<span id="icon">!</span></button>
       <label>Password<input id="password" type="password"></label><output id="output"></output>
@@ -134,6 +135,12 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     }
     await job(async () => await active.click({ selector: '#section' }, opened.tab))
     expect(await page.locator('#output').textContent()).toBe('Section')
+    // AAIM's contact modal saves through a form whose action is javascript:, as a javascript: link runs page script.
+    await job(async () => await active.click({ point: await point('#save') }, opened.tab))
+    expect(await page.locator('#output').textContent()).toBe('Saved')
+    await page.locator('#output').evaluate((output) => { output.textContent = '' })
+    await job(async () => await active.click({ selector: '#save' }, opened.tab))
+    expect(await page.locator('#output').textContent()).toBe('Saved')
     const search = await point('#search')
     await job(async () => await active.fill({ point: search }, 'Example', opened.tab, { enter: true }))
     expect(await page.locator('#output').textContent()).toBe('Search Example')

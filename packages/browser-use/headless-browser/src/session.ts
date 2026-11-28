@@ -1681,7 +1681,8 @@ export class HeadlessBrowserSession {
     // A javascript: link runs the page's own script, as a button does (Tenet's Oracle "Application Questions" link);
     // whatever it then loads meets the network deny list.
     if (facts?.href != null && URL.parse(facts.href)?.protocol !== 'javascript:') this.#assertJobUrl(facts.href)
-    if (facts?.formAction != null) {
+    // A javascript: form action runs page script the same way: AAIM's contact modal (geco.aaimtrack.com) saves through one.
+    if (facts?.formAction != null && URL.parse(facts.formAction)?.protocol !== 'javascript:') {
       this.#assertJobUrl(facts.formAction)
       const decision = this.#activeGuard().decideNavigation({ action: 'open', url, target: facts.formAction, allowOrigin: false })
       if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))

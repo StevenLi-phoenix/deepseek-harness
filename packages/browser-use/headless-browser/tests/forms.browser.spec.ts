@@ -73,6 +73,28 @@ const CONSENT = `<!doctype html><title>Engineer</title><body>
 <div id="filter" class="onetrust-pc-dark-filter" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1"></div>
 <div id="banner" style="position:fixed;left:0;right:0;bottom:0;height:120px;background:#fff;z-index:2"><button id="accept" type="button" onclick="document.getElementById('filter').remove(); document.getElementById('banner').remove()">Accept All Cookies</button></div>`
 
+// SmartRecruiters' Country/Region list: each role=option sits in an spl-dropdown-item's shadow root, and its text is
+// light DOM slotted in through an spl-tooltip, whose own shadow root draws the truncated label over the whole option.
+const SPL = `<!doctype html><title>Location</title><body>
+<div role="listbox" aria-label="Country/Region" style="width:240px">
+<spl-dropdown-item><spl-tooltip>United States</spl-tooltip></spl-dropdown-item>
+<spl-dropdown-item><spl-tooltip>Canada</spl-tooltip></spl-dropdown-item>
+</div><p id="chosen"></p>
+<script>
+  customElements.define('spl-tooltip', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot === null) this.attachShadow({ mode: 'open' }).innerHTML = '<div class=" c-spl-truncate c-spl-truncate--multiline " style="display:block"><slot></slot></div>'
+    }
+  })
+  customElements.define('spl-dropdown-item', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot !== null) return
+      this.attachShadow({ mode: 'open' }).innerHTML = '<div class=" c-spl-dropdown-item " role="option" aria-selected="false" tabindex="-1" style="display:block"><slot></slot></div>'
+      this.shadowRoot.querySelector('[role=option]').addEventListener('click', () => { document.getElementById('chosen').textContent = this.textContent.trim() })
+    }
+  })
+</script>`
+
 const INNER = '<!doctype html><title>Enter your information</title><body><label>Email <input id="inner-email" type="email"></label><label>Password <input id="inner-password" type="password"></label>'
 
 // A Workday prompt: the search box lists matches only after Enter, never on keystrokes.
@@ -134,7 +156,7 @@ async function boot(options: { readonly sensitiveActions?: boolean } = {}): Prom
   const files = join(root, 'uploads')
   const server: Server = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : request.url === '/workday' ? WORKDAY : request.url === '/fade' ? FADE : FORM)
+    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : request.url === '/workday' ? WORKDAY : request.url === '/fade' ? FADE : request.url === '/spl' ? SPL : FORM)
   })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const port = (server.address() as { port: number }).port
@@ -262,6 +284,15 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(typed.target?.score).toBeGreaterThan(0.8)
     const page = await app.browser.page()
     expect(await page.locator('#deep-city').inputValue()).toBe('Brooklyn')
+  }, 120_000)
+
+  it('clicks a dropdown option whose text is slotted into it through a nested shadow root, as SmartRecruiters draws one', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/spl`)
+    const outcome = await app.browser.click({ selector: 'role=option[name="United States"]' })
+    expect(outcome.target?.score).toBeGreaterThan(0.8)
+    const page = await app.browser.page()
+    expect(await page.locator('#chosen').textContent()).toBe('United States')
   }, 120_000)
 
   it('types into a searchable dropdown with keystrokes and clicks the one option the text names', async () => {
