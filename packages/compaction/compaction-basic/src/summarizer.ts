@@ -20,7 +20,7 @@ interface SummaryConfig {
 }
 
 /** Exact provider/model pair that receives one summarization request. */
-export type SummaryRoute = Pick<GenerateOptions, 'provider' | 'model'>
+export type SummaryRoute = Pick<GenerateOptions, 'provider' | 'model' | 'reasoningEffort'>
 
 /** Tags wrapping the structured summary inside the landed checkpoint node. */
 const SUMMARY_OPEN_TAG = '<compacted-summary>'
@@ -138,7 +138,7 @@ export async function summarizeWithLlm(
   conversation: SummaryRoute | undefined,
   signal?: AbortSignal,
 ): Promise<SummaryResult> {
-  const configured = config.summarizationProvider.length === 0
+  const configured: SummaryRoute | undefined = config.summarizationProvider.length === 0
     ? undefined
     : { provider: config.summarizationProvider, model: config.summarizationModel }
   const target = configured ?? conversation
@@ -162,6 +162,7 @@ export async function summarizeWithLlm(
     toolHistory: agent.session.toolHistory(),
     ...input.tools === undefined ? {} : { tools: [...input.tools] },
     maxTokens: config.maxTokens,
+    ...target.reasoningEffort === undefined ? {} : { reasoningEffort: target.reasoningEffort },
     sessionId: agent.session.id,
     purpose: 'compaction',
     ...signal === undefined ? {} : { signal },

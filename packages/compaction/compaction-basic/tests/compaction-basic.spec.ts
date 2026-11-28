@@ -25,6 +25,7 @@ import type {
   LlmCallConfig,
   LlmResolvedModelInfo,
   Message,
+  ReasoningEffortId,
   StreamChunk,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
@@ -1587,6 +1588,27 @@ describe('default one-shot summarizer', () => {
     expect(output.model).toBe('routed')
     expect(adapter.lastOptions?.provider).toBe('routed')
     expect(adapter.lastOptions?.model).toBe('routed')
+  })
+
+  it('summarizes with the routed reasoning effort, and without one on another route', async () => {
+    // Codex GPT-6.2 Sol takes no `none` effort; a summary request that named none was sent as `none` and refused (2026-11-28).
+    const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }], undefined, 'routed')
+    const efforts = [{ id: brandString<ReasoningEffortId>('high'), name: 'High' }]
+    vi.spyOn(adapter, 'resolveModel').mockImplementation(async (provider, model) => ({ provider, id: model, name: model, reasoning: { efforts } }))
+    const session = Session.create(brandString<SessionId>('routed-effort'))
+    session.append('request/header', {
+      header: { config: { provider: 'routed', model: 'routed', reasoningEffort: brandString<ReasoningEffortId>('high') } },
+      reason: 'initial',
+    })
+    await compact.runSummarize(promptInput('history'), agent(session, 'fallback'))
+    expect(adapter.lastOptions?.reasoningEffort).toBe('high')
+
+    const other = await summarizerHarness([{ type: 'text', text: 'summary' }], undefined, 'summary-provider', {
+      auto: false, summarizationProvider: 'summary-provider', summarizationModel: 'summary-model',
+    })
+    await other.compact.runSummarize(promptInput('history'), agent(session, 'fallback'))
+    expect(other.adapter.lastOptions?.provider).toBe('summary-provider')
+    expect(other.adapter.lastOptions).not.toHaveProperty('reasoningEffort')
   })
 
   it('summarizes on the route that last answered, with its policy, after a later request got no response', async () => {

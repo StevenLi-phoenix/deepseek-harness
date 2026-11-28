@@ -54,6 +54,21 @@ function completeRoute(route: { provider?: string; model?: string } | undefined)
   return { provider: route.provider, model: route.model }
 }
 
+/**
+ * The summary replays the conversation, so on the routed model it also sends the conversation's reasoning effort:
+ * Codex GPT-6.2 Sol takes no `none` effort, and a summary request that named none was sent as `none` and refused
+ * (2026-11-28). Another route gets none of it, since the effort was chosen for the routed model.
+ * @param route - the route that will summarize, if any.
+ * @param session - supplies the latest request header.
+ * @returns the route with the header's reasoning effort when both name the same provider and model.
+ */
+function withRoutedEffort(route: SummaryRoute | undefined, session: Session): SummaryRoute | undefined {
+  const config = session.requestHeader()?.config
+  if (route === undefined || config?.reasoningEffort === undefined) return route
+  if (config.provider !== route.provider || config.model !== route.model) return route
+  return { ...route, reasoningEffort: config.reasoningEffort }
+}
+
 /** Resolve the exact provider/model durably routed for the latest request. */
 function routedTarget(session: Session): SummaryRoute | undefined {
   return completeRoute(session.requestHeader()?.config)
@@ -294,7 +309,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     const config = target === undefined
       ? this.config
       : resolveTargetPolicy(this.config, target)
-    return summarizeWithLlm(this.ctx, config, input, agent, target, signal)
+    return summarizeWithLlm(this.ctx, config, input, agent, withRoutedEffort(target, agent.session), signal)
   }
 
   /**
