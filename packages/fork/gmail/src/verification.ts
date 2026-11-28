@@ -37,7 +37,9 @@ function senderHost(payload: GmailPart | undefined): string | null {
     if (mailbox.name.includes('@')) return null // A display-name address is not a second sender.
     return mailbox.address.slice(mailbox.address.lastIndexOf('@') + 1)
   } catch (error: unknown) {
+    /* v8 ignore else -- parseMailbox throws only AddressProblem. */
     if (error instanceof AddressProblem) return null
+    /* v8 ignore next -- parseMailbox throws only AddressProblem. */
     throw error
   }
 }

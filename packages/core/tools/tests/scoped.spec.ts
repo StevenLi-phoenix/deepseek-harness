@@ -266,6 +266,27 @@ describe('restrict() over an inherited scope layer', () => {
     expect(ctx.tools.schemas(child.key).map(t => t.name)).toEqual(['bash'])
     expect(ctx.tools.schemas(parent.key).map(t => t.name)).toEqual(['bash'])
   })
+
+  it('keeps the restricting scope\'s own tools for nested scopes only when it preserves local registrations', async () => {
+    const ctx = await mount()
+    ctx.tools.register(tool('web'))
+    const plain = await mintAgentScope(ctx, 'plain')
+    const preserving = await mintAgentScope(ctx, 'preserving')
+    plain.scope.ctx.tools.register(tool('job'))
+    preserving.scope.ctx.tools.register(tool('job'))
+    const plainChild = await mintChild(ctx, plain.key, 'plain-child')
+    const preservingChild = await mintChild(ctx, preserving.key, 'preserving-child')
+    plain.scope.ctx.tools.restrict({ allow: [] })
+    preserving.scope.ctx.tools.restrict({ allow: [], preserveLocal: true })
+
+    expect(ctx.tools.schemas(plainChild.key)).toEqual([])
+    expect(ctx.tools.schemas(preservingChild.key).map(t => t.name)).toEqual(['job'])
+    expect(await run(ctx, 'job', preservingChild.key)).toBe('ran:job')
+    expect(await run(ctx, 'web', preservingChild.key)).toBe('Error: unknown tool "web"')
+    // The nested scope's own filter still applies to what it inherits.
+    preservingChild.scope.ctx.tools.restrict({ deny: ['job'] })
+    expect(ctx.tools.schemas(preservingChild.key)).toEqual([])
+  })
 })
 
 describe('scoped execution dispatch', () => {

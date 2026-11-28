@@ -67,8 +67,16 @@ describe('verification-only mode', () => {
     const { ctx, gmail } = await mount()
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual(['gmail_accounts', 'gmail_verification_code'])
     const tool = ctx.tools.get('gmail_accounts')!
-    expect(await tool.execute({}, {} as never)).toEqual({ accounts: [{ id: 'work', email: 'owner@example.org' }] })
+    const accounts = await tool.execute({}, {} as never)
+    expect(accounts).toEqual({ accounts: [{ id: 'work', email: 'owner@example.org' }] })
+    expect(tool.output.render({}, accounts as JsonValue)).toEqual([{ type: 'text', text: '{"accounts":[{"id":"work","email":"owner@example.org"}]}' }])
     expect(gmail.held).not.toHaveBeenCalled()
+  })
+
+  it('presents both calls as reads', async () => {
+    const { ctx } = await mount()
+    expect(ctx.tools.get('gmail_accounts')!.presentCall?.({})).toEqual({ card: 'generic', title: 'Gmail accounts', kind: 'read' })
+    expect(ctx.tools.get('gmail_verification_code')!.presentCall?.(ARGS)).toEqual({ card: 'generic', title: 'Gmail verification code', kind: 'read' })
   })
 
   it('uses the trusted Session id, normalizes hostnames, checks again after Gmail, and emits only the reduced JSON', async () => {
@@ -120,6 +128,7 @@ describe('verification-only mode', () => {
     ['careers.example.co.uk', 'example.co.uk -in:inbox'],
     ['careers.example.co.uk', 'owner@example.co.uk'],
     ['careers.example.co.uk', 'co.uk'],
+    ['careers.example.co.uk', 'mail-.example.co.uk'],
     ['127.0.0.1', '127.0.0.1'],
     [null, 'example.co.uk'],
   ])('refuses host %s with sender %s without touching mail', async (host, sender_domain) => {
@@ -258,6 +267,36 @@ describe('verification-only mode', () => {
     h.currentHost.mockRejectedValue(new Error('private browser URL'))
     expect((await h.invoke(ARGS)).value).toEqual(MISMATCH)
     expect(h.logs.at(-1)).toBe('tool-gmail: gmail_verification_code domain_mismatch')
+  })
+
+  it('reports a mismatch instead of a lookup failure when the active host changed during the lookup', async () => {
+    const h = await mount()
+    h.gmail.verificationCode.mockRejectedValue(new Error('Google error'))
+    h.currentHost.mockResolvedValueOnce('careers.example.co.uk').mockResolvedValueOnce('unrelated.example')
+    expect((await h.invoke(ARGS)).value).toEqual(MISMATCH)
+  })
+
+  it('does not vouch with a page whose links cannot be read or a suffix lookup that fails', async () => {
+    const unreadable = await mount('eodr.fa.us2.oraclecloud.com')
+    unreadable.linkedHosts.mockRejectedValue(new Error('page gone'))
+    expect((await unreadable.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') as string })
+    const failing = await mount()
+    failing.registrableDomain.mockImplementation(() => { throw new Error('suffix list unavailable') })
+    expect((await failing.invoke(ARGS)).value).toEqual(MISMATCH)
+    expect(failing.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('refuses a sensitive sender host inside the approved domain and stops searching aliases once cancelled', async () => {
+    const h = await mount('tenant.wd1.myworkdayjobs.com')
+    const abort = new AbortController()
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domainOf('accounts.google.com')).toBeNull()
+      expect(lookup.domainOf('otp.workday.com')).toBe('workday.com')
+      abort.abort('cancelled')
+      return null
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'workday.com' }, true, abort.signal)).value).toEqual(MISMATCH)
+    expect(h.gmail.verificationCode).toHaveBeenCalledTimes(1)
   })
 
   it('does not release a result if cancellation occurred during Gmail lookup', async () => {

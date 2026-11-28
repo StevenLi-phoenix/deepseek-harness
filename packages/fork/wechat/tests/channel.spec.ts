@@ -834,6 +834,28 @@ describe('job-lead conversation routing', () => {
     expect(h.sessions.created).toHaveLength(1)
   })
 
+  it('names a turn a job-lead report started or joined as a report', async () => {
+    const h = await harness({ jobLeadSessionId: 'job-fixed' })
+    expect(h.channel.isJobLeadReport(caller('chat-1', 'untrusted:job:test'))).toBe(true)
+    expect(h.channel.isJobLeadReport(caller('chat-1'))).toBe(false)
+  })
+
+  it('queues nothing for empty text, or when the owner turn changed while the target was looked up', async () => {
+    const h = await harness({ jobLeadSessionId: 'job-fixed' })
+    await h.ownerSays('hi')
+    h.sessions.live.add('job-fixed')
+    h.sessions.headers.set('job-fixed', { agentPreset: 'job-lead' })
+    expect(await h.channel.tellJobLead(caller('chat-1'), '   ', AbortSignal.timeout(1000))).toEqual({ notQueued: 'text is empty' })
+    const owner = caller('chat-1')
+    const pending = h.channel.tellJobLead(owner, 'pause this run', AbortSignal.timeout(1000))
+    owner.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'a report joined' }],
+      source: { kind: 'user', rpcId: 'untrusted:job:late' as SessionPromptRequest['requestId'] },
+    }), { surfaceOp: 'append' })
+    expect(await pending).toEqual({ notQueued: 'the job-lead route or owner turn changed before queueing' })
+    expect(h.sessions.prompts).toHaveLength(1)
+  })
+
   it('does not offer a target or queue anything if the private overlay is absent', async () => {
     const h = await harness()
     await h.ownerSays('hi')

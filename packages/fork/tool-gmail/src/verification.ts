@@ -118,7 +118,7 @@ async function vouchedEmployer(
 ): Promise<boolean> {
   if (!vouchingSite(browser, site, sender) || signal.aborted) return false
   try {
-    const hosts = await browser.linkedHosts?.(sessionId, signal) ?? []
+    const hosts = await browser.linkedHosts(sessionId, signal)
     return hosts.some(host => registrable(browser, host) === sender)
   } catch {
     // A page that cannot be read vouches for nothing.
@@ -130,9 +130,9 @@ async function vouchedEmployer(
  * @param browser - the preset's browser bridge.
  * @param site - the registrable domain of the caller's tab.
  * @param sender - the requested sender's registrable domain.
- * @returns whether an open page of that site could vouch for that sender.
+ * @returns whether an open page of that site could vouch for that sender, which needs a bridge that reads page links.
  */
-function vouchingSite(browser: JobApplyBrowser, site: string, sender: string): boolean {
+function vouchingSite(browser: JobApplyBrowser, site: string, sender: string): browser is JobApplyBrowser & Required<Pick<JobApplyBrowser, 'linkedHosts'>> {
   return (EMPLOYER_MAIL_ATS.has(site) || VENDOR_MAIL_ATS.has(sender)) && !UNVOUCHED_DOMAINS.has(sender) && browser.linkedHosts !== undefined
 }
 

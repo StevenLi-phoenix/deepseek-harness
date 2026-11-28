@@ -356,6 +356,8 @@ describe('mountScheduleTrust', () => {
     ctx.emit('schedule/changed')
     await trust.settled()
     expect(logs.some(line => line.startsWith('warn integrity-watch: recording the schedule state failed: %s EEXIST'))).toBe(true)
+    await trust.seed(trust.version(), trustedOf(ABSENT, undefined))
+    expect(logs.some(line => line.startsWith('warn integrity-watch: recording the scanned schedule state failed: %s EEXIST'))).toBe(true)
   })
 })
 

@@ -19,13 +19,18 @@ interface Answer {
   readonly body?: unknown
 }
 
-async function mount(answer: Answer | (() => never), token: string | null = TOKEN) {
+async function mount(answer: Answer | (() => never), token: string | null | Error = TOKEN) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type}: ${String(message.args[0])}`) } })
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
-  ctx.provide('credentials', { resolve: async () => (token === null ? undefined : { value: token }) } as never)
+  ctx.provide('credentials', {
+    resolve: async () => {
+      if (token instanceof Error) throw token
+      return token === null ? undefined : { value: token }
+    },
+  } as never)
   const posted: { url: string; headers: Record<string, string>; body: unknown }[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
     posted.push({ url, headers: init.headers as Record<string, string>, body: JSON.parse(init.body as string) })
@@ -82,6 +87,9 @@ describe('owner_push', () => {
     [{ status: 403, body: { error: 'forbidden' } }, 'the message bus refused the token (HTTP 403 forbidden); tell the owner in your WeChat report instead'],
     [{ status: 502, body: { error: 'upstream' } }, 'the message bus answered HTTP 502 upstream; tell the owner in your WeChat report instead, and do not retry in a loop'],
     [{ status: 200, body: { ok: true } }, 'the message bus answered without a message id; tell the owner in your WeChat report instead, and do not retry in a loop'],
+    [{ status: 200 }, 'the message bus answered without a message id; tell the owner in your WeChat report instead, and do not retry in a loop'],
+    [{ status: 500 }, 'the message bus answered HTTP 500; tell the owner in your WeChat report instead, and do not retry in a loop'],
+    [{ status: 422, body: { error: 'text_too_long' } }, 'the message bus rejected the message (HTTP 422 text_too_long); tell the owner in your WeChat report instead, and do not retry in a loop'],
   ])('reports a bus answer of %j without the token', async (answer, said) => {
     const { call, logs } = await mount(answer)
     expect(await call({ text: 'x', key: 'k' })).toMatchObject({ value: { notPosted: said } })
@@ -101,6 +109,19 @@ describe('owner_push', () => {
     expect(posted).toHaveLength(0)
   })
 
+  it('fails the call when the token cannot be read, instead of reporting a bus answer', async () => {
+    const { call, posted } = await mount({ status: 200, body: { id: 1 } }, new Error('credential store locked'))
+    expect(await call({ text: 'x', key: 'k' })).toMatchObject({ isError: true })
+    expect(posted).toHaveLength(0)
+  })
+
+  it('presents a push and a digest line differently, with the text as raw input', async () => {
+    const { ctx } = await mount({ status: 200, body: { id: 1 } })
+    const tool = ctx.tools.get('owner_push')!
+    expect(tool.presentCall?.({ text: 'due', key: 'k' })).toEqual({ card: 'generic', title: 'Push to the owner\'s phone', kind: 'other', rawInput: 'due' })
+    expect(tool.presentCall?.({ text: 'due', key: 'k', digest: true })).toEqual({ card: 'generic', title: 'Add a line to the owner\'s digest', kind: 'other', rawInput: 'due' })
+  })
+
   it('refuses a configuration the bus would not push', async () => {
     const ctx = new Context()
     contexts.push(ctx)
@@ -116,6 +137,10 @@ describe('the message bus client', () => {
     const down = new MessageBus({ apiBase: 'https://api.example.test', timeoutMs: 1000, token: async () => TOKEN, fetch: async () => { throw new Error('ECONNREFUSED') } })
     await expect(down.post({ source: 'dsh', text: 'x', channel: 'dsh', priority: 6, idempotency_key: 'owner-push:k' }))
       .rejects.toMatchObject({ failure: 'network', message: 'the message bus could not be reached (ECONNREFUSED)' })
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- an injected fetch may reject with a value that is not an Error.
+    const odd = new MessageBus({ apiBase: 'https://api.example.test', timeoutMs: 1000, token: async () => TOKEN, fetch: () => Promise.reject('socket closed') })
+    await expect(odd.post({ source: 'dsh', text: 'x', channel: 'dsh', priority: 6, idempotency_key: 'owner-push:k' }))
+      .rejects.toMatchObject({ failure: 'network', message: 'the message bus could not be reached (socket closed)' })
     const slow = new MessageBus({
       apiBase: 'https://api.example.test',
       timeoutMs: 1000,

@@ -190,6 +190,21 @@ describe('write outcome', () => {
     expect(writeOutcome({ conflict: true, current: { version: 'x' }, changed_fields: ['a', 3] })).toMatchObject({ current_version: null, changed_fields: ['a'] })
     expect(writeOutcome({ conflict: true, current: null, changed_fields: 'a' })).toMatchObject({ current_version: null, changed_fields: [] })
   })
+
+  it('names the existing task of a duplicate by its own title, its data title, or placeholders when the service sends none', () => {
+    expect(writeOutcome({ conflict: true, reason: 'duplicate_platform_identity', current: { id: 't9', version: 3, title: 'Lab 4', data: { title: 'old' } } }))
+      .toMatchObject({ existing_id: 't9', existing_title: 'Lab 4', current_version: 3 })
+    expect(writeOutcome({ conflict: true, reason: 'duplicate_title', current: { id: 't9', data: { title: 'Lab 4' } } }))
+      .toMatchObject({ existing_title: 'Lab 4', current_version: null })
+    expect(writeOutcome({ conflict: true, reason: 'duplicate_title', current: { id: 7, data: null } })).toEqual({
+      conflict: true,
+      reason: 'duplicate_title',
+      existing_id: null,
+      existing_title: null,
+      current_version: null,
+      next: 'The records already hold this task as another record: nothing was saved. Send the same observation again with id <that id> and expected_version <its version>, only the fields that differ; do not make a new task for it.',
+    })
+  })
 })
 
 describe('read tools called directly', () => {

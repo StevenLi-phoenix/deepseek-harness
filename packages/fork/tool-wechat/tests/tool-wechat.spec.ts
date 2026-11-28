@@ -142,6 +142,7 @@ describe('tell_job_lead', () => {
     })
     expect(results[0]?.result).toMatchObject({ value: { queued: true } })
     expect(tellJobLead).toHaveBeenCalledWith({ id: 'chat' }, 'check the queue', expect.any(AbortSignal))
+    expect(ctx.tools.get('tell_job_lead')!.presentCall?.({ text: 'check the queue' })).toEqual({ card: 'generic', title: 'Message the job lead', kind: 'other' })
     toolSet.dispose()
   })
 
@@ -155,6 +156,18 @@ describe('tell_job_lead', () => {
     })
     expect(JSON.stringify(execution.results[0]?.result)).toContain('Summarize it without calling tools')
     expect(holdDelivery).not.toHaveBeenCalled()
+  })
+
+  it('lets the main agent call tools in a turn no job-lead report started', async () => {
+    const holdDelivery = vi.fn(async () => ({ held: 1, wakes: true }))
+    const { ctx } = await mount({ isJobLeadReport: () => false, holdDelivery })
+    const execution = await ctx.tools.execute({
+      agent: { session: { id: 'chat' } } as never,
+      signal: AbortSignal.timeout(1000),
+      calls: [{ type: 'tool-call', id: ToolCallId('hold-call'), name: 'defer_deliver', arguments: '{"text":"good morning"}' }],
+    })
+    expect(execution.results[0]?.result).toMatchObject({ value: { held: 1, wakes: true } })
+    expect(holdDelivery).toHaveBeenCalledTimes(1)
   })
 })
 

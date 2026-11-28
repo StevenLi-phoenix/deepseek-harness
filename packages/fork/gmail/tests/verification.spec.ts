@@ -29,7 +29,8 @@ function fixture(messages: GmailMessage[], options: { nextPageToken?: string; fu
     fetch: async (input) => {
       const url = new URL(input instanceof Request ? input.url : input)
       calls.push(url)
-      if (url.pathname.endsWith('/messages')) return Response.json({ messages: messages.map(({ id }) => ({ id })), nextPageToken: options.nextPageToken })
+      // Gmail leaves out `messages` when nothing matches.
+      if (url.pathname.endsWith('/messages')) return Response.json({ ...messages.length === 0 ? {} : { messages: messages.map(({ id }) => ({ id })) }, nextPageToken: options.nextPageToken })
       const id = url.pathname.split('/').at(-1)
       const format = url.searchParams.get('format')
       const mail = (format === 'full' ? (options.full ?? messages) : messages).find(row => row.id === id)
@@ -139,5 +140,50 @@ describe('Gmail verification proofs', () => {
     ]
     expect(await fixture(links).run()).toEqual({ code: null, link: 'https://mail.example.co.uk/verify?a=new', domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: true })
     expect(await fixture([...links, message('code', 'Verify account with 4321', { beforeMs: 3000 })]).run()).toEqual(result('4321', NOW - 3000))
+  })
+
+  it('finds nothing when no message matches', async () => {
+    expect(await fixture([]).run()).toBeNull()
+  })
+
+  it('skips a message without exactly one plain From address or without a receipt time', async () => {
+    const bare = message('bare', 'Verification code 1234')
+    const h = fixture([
+      { ...bare, id: 'none', payload: {} },
+      { ...bare, id: 'two', payload: { headers: [...bare.payload?.headers ?? [], { name: 'From', value: 'other@example.co.uk' }] } },
+      message('malformed', 'Verification code 1234', { sender: 'Careers <not an address>' }),
+      { ...bare, id: 'undated', internalDate: undefined },
+    ])
+    expect(await h.run()).toBeNull()
+  })
+
+  it('reads text nested in an inline multipart body, including a part without a media type', async () => {
+    const h = fixture([message('nested', 'Your account', { body: { mimeType: 'multipart/alternative', parts: [
+      { body: { data: Buffer.from('ignored').toString('base64url') } },
+      { mimeType: 'multipart/related', parts: [simplePart('Verification code was 5678')] },
+    ] } })])
+    expect(await h.run()).toEqual(result('5678'))
+  })
+
+  it('breaks a tie in receipt time by message id', async () => {
+    const h = fixture([message('b', 'Verification code 2222'), message('a', 'Verification code 1111')])
+    expect(await h.run()).toEqual(result('1111', NOW - 1000, true))
+  })
+
+  it.each([
+    ['wording just before it', 'Account', 'Click to verify your account: https://mail.example.co.uk/welcome?t=1', 'https://mail.example.co.uk/welcome?t=1'],
+    ['a verification subject when it is the only link', 'Verify your account', 'Open https://mail.example.co.uk/welcome?t=2', 'https://mail.example.co.uk/welcome?t=2'],
+    ['none of those', 'Account', 'Open https://mail.example.co.uk/welcome?t=3', null],
+  ])('takes a link that carries no verification path by %s', async (_case, subject, body, link) => {
+    const h = fixture([message('link', subject, { body: simplePart(body) })])
+    expect(await h.run()).toEqual(link === null ? null : { code: null, link, domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: false })
+  })
+
+  it('does not call the same link in two messages ambiguous', async () => {
+    const h = fixture([
+      message('new', 'Verify account', { body: simplePart('https://mail.example.co.uk/verify?a=same') }),
+      message('old', 'Verify account', { beforeMs: 2000, body: simplePart('https://mail.example.co.uk/verify?a=same') }),
+    ])
+    expect(await h.run()).toEqual({ code: null, link: 'https://mail.example.co.uk/verify?a=same', domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: false })
   })
 })
