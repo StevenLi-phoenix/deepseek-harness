@@ -420,6 +420,23 @@ describe('fetch formatting', () => {
     expect(parseFetchArgs({ url: 'https://a.test' })).toEqual({ url: 'https://a.test' })
   })
 
+  it('takes a non-negative integer start, and reads 0 as the beginning', () => {
+    expect(parseFetchArgs({ url: 'https://a.test', start: 0 })).toEqual({ url: 'https://a.test' })
+    expect(parseFetchArgs({ url: 'https://a.test', start: 4096 })).toEqual({ url: 'https://a.test', start: 4096 })
+    for (const start of [-1, 1.5]) expect(() => parseFetchArgs({ url: 'https://a.test', start })).toThrow('start must be a non-negative integer')
+  })
+
+  it('names the window of a paged text and how to read on, and counts it as truncated', () => {
+    const page = { url: 'https://a.test', statusCode: 200, truncated: false, body: { kind: 'text' as const, content: 'abc' }, start: 10, next: 13, totalChars: 20 }
+    const ranged = HEADER.replace('(HTTP 200)', '(HTTP 200), characters 10-13 of 20')
+    expect(formatFetchOutput(page, NO_CAP))
+      .toBe(`${ranged}abc\n\n(Content continues: 7 more characters. Call web_fetch again with the same url and start: 13 to read on.)`)
+    expect(fetchMetaFromValue(page, NO_CAP)).toEqual({ url: 'https://a.test', statusCode: 200, truncated: true })
+    const last = { url: 'https://a.test', statusCode: 200, truncated: false, body: { kind: 'text' as const, content: 'defghij' }, start: 13, totalChars: 20 }
+    expect(formatFetchOutput(last, NO_CAP)).toBe(`${HEADER.replace('(HTTP 200)', '(HTTP 200), characters 13-20 of 20')}defghij`)
+    expect(fetchMetaFromValue(last, NO_CAP)).toEqual({ url: 'https://a.test', statusCode: 200, truncated: false })
+  })
+
   it('presents a fetch call as a fetch-kind card titled by the url', () => {
     expect(presentFetchCall({ url: 'https://a.test' })).toEqual({ card: 'generic', title: 'https://a.test', kind: 'fetch', rawInput: 'https://a.test' })
   })
@@ -1153,6 +1170,39 @@ describe('fetchMaxOutputChars is plugin config', () => {
     })
     const out = await call('web_fetch', { url: 'https://a.test' })
     expect(out.content.map(block => block.type === 'text' ? block.text : '').join('')).toHaveLength(100)
+    await fiber.dispose()
+  })
+
+  it('reads a text longer than one output in windows that each name the next start, as SimplifyJobs\' README needs', async () => {
+    const text = Array.from({ length: 400 }, (_, row) => `| row ${String(row).padStart(3, '0')} |\n`).join('')
+    const fetchProvider = {
+      id: 'stub-fetch',
+      available: () => available,
+      fetch: (request: { url: string }) => Promise.resolve({
+        url: request.url, statusCode: 200, body: { kind: 'text' as const, content: request.url.endsWith('/short') ? 'short' : text }, truncated: false,
+      }),
+    }
+    const { fiber, call } = await mountTools({ config: { fetchMaxOutputChars: 1_000 }, webConfig: { fetchProvider: 'stub-fetch' }, fetchProvider })
+    const read: string[] = []
+    let start: number | undefined = 0
+    for (let calls = 0; start !== undefined && calls < 20; calls += 1) {
+      const out = await call('web_fetch', start === 0 ? { url: 'https://a.test' } : { url: 'https://a.test', start })
+      const value = out.value as { body: { content: string }; start?: number; next?: number; totalChars?: number }
+      const rendered = out.content.map(block => block.type === 'text' ? block.text : '').join('')
+      expect(rendered.length).toBeLessThanOrEqual(1_000)
+      expect(value).toMatchObject({ start, totalChars: text.length })
+      if (value.next !== undefined) expect(rendered).toContain(`start: ${String(value.next)} to read on`)
+      read.push(value.body.content)
+      start = value.next
+    }
+    expect(start).toBeUndefined()
+    expect(read.length).toBeGreaterThan(5)
+    expect(read.join('')).toBe(text)
+    const past = await call('web_fetch', { url: 'https://a.test', start: text.length + 50 })
+    expect(past.value).toMatchObject({ body: { content: '' }, start: text.length, totalChars: text.length })
+    expect((await call('web_fetch', { url: 'https://a.test', start: -1 })).isError).toBe(true)
+    const whole = await call('web_fetch', { url: 'https://a.test/short' })
+    expect(whole.value).toEqual({ url: 'https://a.test/short', statusCode: 200, body: { kind: 'text', content: 'short' }, truncated: false })
     await fiber.dispose()
   })
 

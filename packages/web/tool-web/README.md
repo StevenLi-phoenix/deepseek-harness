@@ -69,8 +69,11 @@ If any query in a multi-query call fails, `web_search` aborts the remaining sear
 
 Call `web_fetch` with one `url`. HTML bodies are filtered and rendered to markdown (GFM tables and strikethrough included); text bodies pass through under an untrusted-content notice. A non-2xx status is reported in the result, not thrown as an error. Truncated content appends `(Content truncated. Fetch a more specific URL or section for the full text.)`.
 
+A text longer than one output comes back in windows: the result carries the window's `start`, the `next` offset and the text's `totalChars`, the header names the character range, and the footer says how many characters remain and which `start` reads on. A call with that `start` fetches the URL again and returns the next window, so a worker reads SimplifyJobs' 850,000-character README in parts instead of only its first. A text that fits one output, read from the beginning, comes back as before. The provider's own body cap still bounds the text the windows cover.
+
 ```text
 web_fetch({ url: 'https://example.com' })
+web_fetch({ url: 'https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/README.md', start: 199500 })
 ```
 
 ### Stable registration

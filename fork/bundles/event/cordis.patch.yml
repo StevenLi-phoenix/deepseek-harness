@@ -39,6 +39,11 @@
   config:
     searchProvider: deepseek-official
     fetchProvider: http
+# web_fetch reads a long text in windows (its `start` parameter), which needs the whole text: SimplifyJobs'
+# internship and new-grad READMEs are about 850,000 characters, and the 100,000-character default cut them.
+- id: web-fetch-http
+  config:
+    maxBodyChars: 2000000
 # PTC keeps per-call function bodies; upstream now defaults to the scoped REPL and rejects a top-level
 # `return` (upgrade guide v0.2.2-rc.5/ptc-default-scoped-repl).
 - id: ptc-runtime

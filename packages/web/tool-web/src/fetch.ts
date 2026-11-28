@@ -103,9 +103,69 @@ turndown.addRule('tableRowWithoutSpanExpansion', {
  * @param args - the schema-validated `web_fetch` arguments.
  * @returns the arguments as the seam's request fields.
  */
-export function parseFetchArgs(args: { url: string }): { url: string } {
+export function parseFetchArgs(args: { url: string; start?: number }): { url: string; start?: number } {
   if (args.url.trim().length === 0) throw new ToolArgsError(['url must be a non-empty string'])
-  return { url: args.url }
+  // Strict-schema providers fill an unused integer with 0, which reads from the beginning like an absent start.
+  const start = args.start ?? 0
+  if (!Number.isSafeInteger(start) || start < 0) throw new ToolArgsError(['start must be a non-negative integer'])
+  return start === 0 ? { url: args.url } : { url: args.url, start }
+}
+
+/**
+ * The `web_fetch` output value: the seam's result, narrowed to one window of its text when the text is longer than one
+ * output holds. SimplifyJobs' internship README is about 850,000 characters, and a worker reading it for postings of
+ * the last two weeks saw only its first part (2026-11-28); each window names where the next one starts.
+ */
+export interface WebFetchValue extends WebFetchResult {
+  /** Character offset of this window into the fetched text; present when the call paged. */
+  readonly start?: number
+  /** Offset the next window starts at, while text remains. */
+  readonly next?: number
+  /** Length of the whole fetched text; present when the call paged. */
+  readonly totalChars?: number
+}
+
+/** Room a window leaves inside the output cap for its header's range note and its continuation footer. */
+const PAGE_RESERVE_CHARS = 240
+
+/**
+ * Narrow a fetch result to the window of its text that starts at `start` and fits one output, so a long text is read
+ * in parts. A text that fits whole, read from the beginning, keeps the result as it was.
+ * @param result - the seam's fetch outcome.
+ * @param start - character offset the caller asked for.
+ * @param maxOutputChars - cap on the complete rendered output.
+ * @returns the output value, with the window's range when it paged.
+ */
+export function pageFetchResult(result: WebFetchResult, start: number, maxOutputChars: number): WebFetchValue {
+  const base = { url: result.url, statusCode: result.statusCode, truncated: result.truncated }
+  const { kind, content } = result.body
+  const room = maxOutputChars - fetchHeader(result).length - PAGE_RESERVE_CHARS
+  if (start === 0 && (room <= 0 || content.length <= room)) return { ...base, body: { kind, content } }
+  const from = Math.min(start, content.length)
+  const window = room <= 0 ? content.slice(from) : content.slice(from, from + room)
+  const end = from + window.length
+  return { ...base, body: { kind, content: window }, start: from, totalChars: content.length, ...end < content.length ? { next: end } : {} }
+}
+
+/**
+ * @param result - a fetch result, paged or whole.
+ * @returns the status header, naming the window's character range when the result paged.
+ */
+function fetchHeader(result: WebFetchValue): string {
+  const range = result.start === undefined || result.totalChars === undefined
+    ? ''
+    : `, characters ${String(result.start)}-${String(result.start + result.body.content.length)} of ${String(result.totalChars)}`
+  return `Fetched ${result.url} (HTTP ${String(result.statusCode)})${range}\n\n${EXTERNAL_WEB_CONTENT_NOTICE}\n\n`
+}
+
+/**
+ * @param result - a paged result with text after its window.
+ * @param next - where that text starts.
+ * @returns the notice that tells the model how to read on.
+ */
+function continuationFooter(result: WebFetchValue, next: number): string {
+  const left = (result.totalChars ?? next) - next
+  return `\n\n(Content continues: ${String(left)} more characters. Call web_fetch again with the same url and start: ${String(next)} to read on.)`
 }
 
 /**
@@ -299,7 +359,7 @@ interface RenderedFetch {
  * @returns the complete `Fetched <url> (HTTP <status>)`-headed text and whether
  *   the provider, a source cut, or the cap trimmed the content.
  */
-function renderFetchOutput(result: WebFetchResult, maxOutputChars: number): RenderedFetch {
+function renderFetchOutput(result: WebFetchValue, maxOutputChars: number): RenderedFetch {
   const byCap = renderCache.get(result) ?? new Map<number, RenderedFetch>()
   const cached = byCap.get(maxOutputChars)
   if (cached !== undefined) return cached
@@ -315,7 +375,7 @@ function renderFetchOutput(result: WebFetchResult, maxOutputChars: number): Rend
  * cap (a deployment constant per registration). Collapses the registry's twin
  * `render`/`presentationMeta` calls into one HTML→markdown conversion.
  */
-const renderCache = new WeakMap<WebFetchResult, Map<number, RenderedFetch>>()
+const renderCache = new WeakMap<WebFetchValue, Map<number, RenderedFetch>>()
 
 /**
  * The uncached conversion behind {@link renderFetchOutput}. Separated so the
@@ -325,15 +385,16 @@ const renderCache = new WeakMap<WebFetchResult, Map<number, RenderedFetch>>()
  * @param maxOutputChars - cap on the complete returned string.
  * @returns the bounded text and effective truncation.
  */
-function computeFetchOutput(result: WebFetchResult, maxOutputChars: number): RenderedFetch {
-  const header = `Fetched ${result.url} (HTTP ${result.statusCode})\n\n${EXTERNAL_WEB_CONTENT_NOTICE}\n\n`
+function computeFetchOutput(result: WebFetchValue, maxOutputChars: number): RenderedFetch {
+  const header = fetchHeader(result)
   const rendered = renderBody(result.body, maxOutputChars)
   const prefix = `${header}${rendered.text}`
-  const truncated = result.truncated || rendered.sourceTruncated || prefix.length > maxOutputChars
-  const full = `${prefix}${truncated ? TRUNCATION_FOOTER : ''}`
+  const footer = result.next === undefined ? TRUNCATION_FOOTER : continuationFooter(result, result.next)
+  const truncated = result.truncated || rendered.sourceTruncated || prefix.length > maxOutputChars || result.next !== undefined
+  const full = `${prefix}${truncated ? footer : ''}`
   if (full.length <= maxOutputChars) return { text: full, truncated }
-  if (maxOutputChars < TRUNCATION_FOOTER.length) return { text: full.slice(0, maxOutputChars), truncated }
-  return { text: `${prefix.slice(0, maxOutputChars - TRUNCATION_FOOTER.length)}${TRUNCATION_FOOTER}`, truncated }
+  if (maxOutputChars < footer.length) return { text: full.slice(0, maxOutputChars), truncated }
+  return { text: `${prefix.slice(0, maxOutputChars - footer.length)}${footer}`, truncated }
 }
 
 /**
@@ -343,7 +404,7 @@ function computeFetchOutput(result: WebFetchResult, maxOutputChars: number): Ren
  * @param maxOutputChars - cap on the complete returned string.
  * @returns the complete text from {@link renderFetchOutput}.
  */
-export function formatFetchOutput(result: WebFetchResult, maxOutputChars: number): string {
+export function formatFetchOutput(result: WebFetchValue, maxOutputChars: number): string {
   return renderFetchOutput(result, maxOutputChars).text
 }
 
@@ -389,7 +450,7 @@ export interface WebFetchMeta {
  *   {@link formatFetchOutput} applies to the render text.
  * @returns the URL, status code, and effective truncation flag.
  */
-export function fetchMetaFromValue(value: WebFetchResult, maxOutputChars: number): JsonValue {
+export function fetchMetaFromValue(value: WebFetchValue, maxOutputChars: number): JsonValue {
   return { url: value.url, statusCode: value.statusCode, truncated: renderFetchOutput(value, maxOutputChars).truncated }
 }
 
@@ -464,6 +525,10 @@ export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChar
       : 'Fetch the content of a specific HTTP(S) URL and return it decoded to text.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
+      start: {
+        type: 'integer',
+        description: 'Character offset to read a long text from, as the previous output\'s continuation note names; omit or 0 to read from the beginning.',
+      },
     },
     output: {
       schema: {
@@ -494,6 +559,9 @@ export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChar
             ],
           },
           truncated: { type: 'boolean', required: true },
+          start: { type: 'integer' },
+          next: { type: 'integer' },
+          totalChars: { type: 'integer' },
         },
       },
       render: (_args, value) => [{ type: 'text', text: formatFetchOutput(value, maxOutputChars) }],
@@ -508,12 +576,12 @@ export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChar
         { url: input.url, ...publicOnly ? { publicOnly } : {} },
         exec.signal,
       )
-      return {
-        url: result.url,
-        statusCode: result.statusCode,
-        body: { kind: result.body.kind, content: result.body.content },
-        truncated: result.truncated,
+      const value = pageFetchResult(result, input.start ?? 0, maxOutputChars)
+      if (value.start !== undefined) {
+        ctx.logger.info('tool-web: web_fetch window %d-%d of %d characters%s', value.start, value.start + value.body.content.length,
+          value.totalChars, value.next === undefined ? '' : ', more follows')
       }
+      return value
     },
     presentCall: presentFetchCall,
     presentResult: (args, result) => presentFetchResult(args, result),

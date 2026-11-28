@@ -2846,6 +2846,10 @@ Fetch the content of a specific HTTP(S) URL and return it decoded to text.
     "url": {
       "type": "string",
       "description": "The HTTP(S) URL to fetch."
+    },
+    "start": {
+      "type": "integer",
+      "description": "Character offset to read a long text from, as the previous output's continuation note names; omit or 0 to read from the beginning."
     }
   },
   "required": [
