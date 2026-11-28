@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramientas de solicitud de empleo",
+    "description": "Permite que los presets de empleo editen el clon de trabajo, escriban el registro, actualicen filas del seguimiento y abran incidencias del flujo mediante operaciones fijas en lugar de una shell."
+  }
+}

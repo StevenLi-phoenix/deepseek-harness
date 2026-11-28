@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Job application tools",
+    "description": "Lets the job presets edit the job clone, write the log, update tracker rows, and file workflow issues through fixed operations instead of a shell."
+  }
+}

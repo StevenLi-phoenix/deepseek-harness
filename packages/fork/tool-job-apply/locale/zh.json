@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "求职工具",
+    "description": "让求职 preset 通过固定操作编辑求职仓库、写日志、更新进度表和提交流程 issue，而不是使用 shell。"
+  }
+}
