@@ -101,6 +101,7 @@ describe('verification-only mode', () => {
   it.each([
     ['tenant.wd1.myworkdayjobs.com', 'workday.com'],
     ['workday.com', 'myworkdayjobs.com'],
+    ['tenant.wd5.myworkdayjobs.com', 'myworkday.com'],
     ['boards.greenhouse.io', 'eu.greenhouse-mail.io'],
   ])('allows the pinned vendor pair %s and %s', async (host, sender_domain) => {
     const h = await mount(host)
@@ -112,6 +113,7 @@ describe('verification-only mode', () => {
     ['tenant.wd1.myworkdayjobs.com', 'employer.example'],
     ['tenant.wd1.myworkdayjobs.com', 'notworkday.com'],
     ['tenant.wd1.myworkdayjobs.com', 'workday.com.example'],
+    ['tenant.wd1.myworkdayjobs.com', 'notmyworkday.com'],
     ['careers.example.co.uk', 'other.co.uk'],
     ['careers.example.co.uk', 'https://example.co.uk'],
     ['careers.example.co.uk', 'example.co.uk -in:inbox'],

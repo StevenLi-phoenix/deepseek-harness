@@ -11,7 +11,8 @@ interface JobApplyBrowser {
 }
 
 const ATS_ALIASES: readonly (readonly string[])[] = [
-  ['workday.com', 'myworkdayjobs.com'],
+  // Workday sends one-time codes from otp.workday.com and account verification links from <tenant>@myworkday.com.
+  ['workday.com', 'myworkday.com', 'myworkdayjobs.com'],
   // Greenhouse's documented US and EU sender subdomains share this registrable domain.
   ['greenhouse.io', 'greenhouse-mail.io'],
 ]
