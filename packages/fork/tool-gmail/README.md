@@ -49,7 +49,7 @@ Use `verification-only` in a preset with a Session-scoped `jobApplyBrowser`. `gm
 
 In full and inbox modes, received mail renders as untrusted data. In full mode, `gmail_send` uses the calling Session’s turn origin and owner words from `turn-taint`; the Gmail service decides whether to send. Attachments resolve against the Session’s working directory in full mode only.
 
-Verification mode uses the calling Session’s live browser hostname before and after the lookup. The sender’s registrable domain must match using the browser’s public suffix rules, or be a pinned Workday or Greenhouse alias. Sender and link subdomains under listed private services, including major identity, bank, payment, and owner API domains, are refused; this finite list does not cover every sensitive service. Links must use HTTPS and match the sender’s registrable domain or its pinned alias.
+Verification mode uses the calling Session’s live browser hostname before and after the lookup. The sender’s registrable domain must match using the browser’s public suffix rules, or be a pinned Workday or Greenhouse alias; for those vendors every alias domain is searched, since Workday mails codes from `otp.workday.com` and account links from `myworkday.com`. Sender and link subdomains under listed private services, including major identity, bank, payment, and owner API domains, are refused; this finite list does not cover every sensitive service. Links must use HTTPS and match the sender’s registrable domain or its pinned alias.
 
 | File | Role |
 |---|---|

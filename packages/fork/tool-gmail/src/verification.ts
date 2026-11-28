@@ -56,6 +56,17 @@ function sameSite(site: string, sender: string): boolean {
   return site === sender || ATS_ALIASES.some(domains => domains.includes(site) && domains.includes(sender))
 }
 
+/**
+ * Gmail matches the sender's exact registrable domain, and a vendor mails from several: Piper Sandler's Workday account
+ * code came from otp.workday.com while the worker asked for myworkday.com (2026-11-27).
+ * @param sender - the approved sender's registrable domain.
+ * @returns the sender first, then the other domains of its pinned alias group.
+ */
+function senderDomains(sender: string): readonly string[] {
+  const group = ATS_ALIASES.find(domains => domains.includes(sender))
+  return group === undefined ? [sender] : [sender, ...group.filter(domain => domain !== sender)]
+}
+
 async function liveHost(browser: JobApplyBrowser | undefined, sessionId: string | undefined, signal: AbortSignal): Promise<string | null> {
   if (browser === undefined || sessionId === undefined || signal.aborted) return null
   try {
@@ -96,7 +107,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
   }))
   ctx.tools.register(defineTool({
     name: 'gmail_verification_code',
-    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias. Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
+    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched. Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
     parameters: {
       account: { type: 'string', required: true, description: 'Account id from gmail_accounts.' },
       sender_domain: { type: 'string', required: true, description: 'Expected sender domain, not a URL or email address.' },
@@ -126,19 +137,24 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
         ? Math.min(MAX_LOOKBACK_MINUTES, Math.max(1, requested))
         : DEFAULT_LOOKBACK_MINUTES
       const now = Date.now()
-      let answer: VerificationProof | null
+      let answer: VerificationProof | null = null
       try {
-        answer = await gmail.verificationCode(input.account.trim(), {
-          domain: sender,
-          domainOf: host => sensitive(host) ? null : registrable(browser, host),
-          allowsLinkHost: (host) => {
-            const linkDomain = registrable(browser, host)
-            return linkDomain !== null && !sensitive(host) && !sensitive(linkDomain) && sameSite(sender, linkDomain)
-          },
-          after: now - since * MINUTE_MS,
-          before: now,
-          signal: exec.signal,
-        })
+        // Each alias domain is its own Gmail search; the newest proof across them wins.
+        for (const domain of senderDomains(sender)) {
+          if (exec.signal.aborted) break
+          const found = await gmail.verificationCode(input.account.trim(), {
+            domain,
+            domainOf: host => sensitive(host) ? null : registrable(browser, host),
+            allowsLinkHost: (host) => {
+              const linkDomain = registrable(browser, host)
+              return linkDomain !== null && !sensitive(host) && !sensitive(linkDomain) && sameSite(sender, linkDomain)
+            },
+            after: now - since * MINUTE_MS,
+            before: now,
+            signal: exec.signal,
+          })
+          if (found !== null && (answer === null || found.receivedAt > answer.receivedAt)) answer = found
+        }
       } catch {
         // API diagnostics may contain message ids or caller data. Only emit the stable failure key.
         if (await liveHost(browser, sessionId, exec.signal) !== before) return mismatch()

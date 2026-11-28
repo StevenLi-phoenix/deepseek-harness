@@ -137,6 +137,22 @@ describe('verification-only mode', () => {
     expect(h.logs).toEqual(['tool-gmail: gmail_verification_code sensitive_sender'])
   })
 
+  it('searches every domain of a pinned vendor and returns the newest proof', async () => {
+    const h = await mount('pipersandler.wd501.myworkdayjobs.com')
+    const asked: string[] = []
+    h.gmail.verificationCode.mockImplementation(async (_account, lookup) => {
+      asked.push(lookup.domain)
+      if (lookup.domain === 'workday.com') return { ...RESULT, domain: 'workday.com', receivedAt: RESULT.receivedAt + 60_000 }
+      if (lookup.domain === 'myworkday.com') return { ...RESULT, code: null, link: 'https://pipersandler.wd501.myworkdayjobs.com/verify', domain: 'myworkday.com' }
+      return null
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'myworkday.com' })).value).toMatchObject({ found: true, code: RESULT.code, from_domain: 'workday.com' })
+    expect(asked).toEqual(['myworkday.com', 'workday.com', 'myworkdayjobs.com'])
+    const plain = await mount()
+    await plain.invoke(ARGS)
+    expect(plain.gmail.verificationCode).toHaveBeenCalledTimes(1)
+  })
+
   it('returns only the trusted link and rejects unrelated or sensitive link hosts', async () => {
     const h = await mount('boards.greenhouse.io')
     const link = 'https://eu.greenhouse-mail.io/verify?token=abc'
