@@ -9,7 +9,7 @@ import { Config } from '../src/config.ts'
 import { ActionGuard } from '../src/guard.ts'
 import { deniedJobUrl } from '../src/job-apply-network.ts'
 import { JobApplyUploads } from '../src/job-apply.ts'
-import { HeadlessBrowserSession } from '../src/session.ts'
+import { HeadlessBrowserSession, JOB_TAB_IDLE_MS } from '../src/session.ts'
 import { MAX_TABS } from '../src/tabs.ts'
 
 const deny = [
@@ -187,6 +187,75 @@ it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an idle job
     expect(left).toContain(idle[1])
     for (const tab of ownerTabs) expect(left).toContain(tab)
     expect(infos.some(line => line.includes('closed idle job-apply tab') && line.includes(idle[0] ?? 'missing'))).toBe(true)
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('keeps a working Session’s popup at the cap and hands an idle Session’s tabs to the next worker', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-lease-'))
+  const infos: string[] = []
+  let port = 0
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html')
+    if (req.url === '/apply') {
+      res.end(`<title>Posting</title><button id="apply" onclick="window.open('http://ats.example.test:${port}/form')">Apply</button>`)
+      return
+    }
+    res.end(`<title>Page ${req.url}</title><input id="email">`)
+  })
+  let browser: HeadlessBrowserSession | undefined
+  let clock = 1_000_000
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    port = bound.port
+    const base = `http://jobs.example.test:${port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      now: () => clock,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    const open = () => active.tabs().state().map(tab => tab.id)
+    for (let n = 0; open().length < MAX_TABS - 2; n++) await active.open(`${base}/owner-${n}`, true)
+    const posting = await as('a', async () => await active.open(`${base}/apply`, true))
+    const clicked = await as('a', async () => await active.click({ selector: '#apply' }, posting.tab))
+    const popup = clicked.popups?.[0]?.tab ?? 'missing'
+    expect(open()).toHaveLength(MAX_TABS)
+    expect(await active.currentJobHost('a')).toBe('ats.example.test')
+
+    // Worker a just clicked Apply: its popup stays, and b is told the strip is busy rather than to close a tab.
+    clock += 1_000
+    await expect(as('b', async () => await active.open(`${base}/b`, true))).rejects.toThrow(/at most 8 tabs; every tab belongs to a Session still working/u)
+    expect(open()).toContain(popup)
+    await expect(as('b', async () => await active.read({}, posting.tab))).rejects.toThrow('still working in it')
+
+    // After a goes quiet, b sent to continue the form lists a's tabs, resumes one by URL and takes it over.
+    clock += JOB_TAB_IDLE_MS
+    expect((await as('b', async () => await active.listTabs())).map(tab => tab.id).sort()).toEqual([posting.tab, popup].sort())
+    expect((await as('b', async () => await active.resumeTab({ urlSubstring: '/form' }))).tab).toBe(popup)
+    expect(active.tabs().owner(popup)).toBe('job-apply:b')
+    expect(infos.some(line => line.includes('took over idle job-apply tab') && line.includes(popup))).toBe(true)
+    expect(await active.currentJobHost('b')).toBe('ats.example.test')
+    await expect(as('a', async () => await active.read({}, popup))).rejects.toThrow('still working in it')
+
+    // Once both are quiet, c's open closes the least recently used idle tab, never one of its own.
+    clock += JOB_TAB_IDLE_MS
+    const c = await as('c', async () => await active.open(`${base}/c`, true))
+    expect(c.title).toBe('Page /c')
+    expect(open()).not.toContain(posting.tab)
+    expect(open()).toContain(popup)
+    await expect(as('c', async () => await active.read({}, posting.tab))).rejects.toThrow(/is closed/u)
   } finally {
     await browser?.close()
     server.closeAllConnections()

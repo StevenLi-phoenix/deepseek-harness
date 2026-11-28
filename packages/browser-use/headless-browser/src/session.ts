@@ -114,17 +114,21 @@ export interface SessionDeps {
   readonly kill?: (pid: number) => boolean
   /** Plugin-owned metadata journal; direct callers can construct an ephemeral browser. */
   readonly tabStore?: TabStore
-  /** How long a job-apply tab must sit unused before another Session's open may close it at the tab cap. */
+  /** How long a job-apply Session must make no browser call before another may close or take over its tabs. */
   readonly jobTabIdleMs?: number
+  /** Clock for the job-apply tab leases; tests pass a fake one. */
+  readonly now?: () => number
 }
 
 const JOB_OWNER_PREFIX = 'job-apply:'
 /**
- * A job-apply tab unused this long may be closed when another Session needs a slot. Workers act every few
- * seconds; one that has finished keeps its tabs, and on 2026-11-27 seven such tabs filled the eight shared
- * slots, so every later open failed.
+ * A job-apply Session that has made no browser call this long has finished or stopped: at the tab cap another
+ * Session's open may close its tabs, and another job-apply Session may take one over, as a worker the lead sends to
+ * continue a form does. Workers act every few seconds; waiting for an emailed code is the longest pause, about two
+ * minutes. On 2026-11-27 finished workers' tabs filled the eight shared slots, and a lease measured per tab instead of
+ * per Session closed a worker's Apply popup one second after it opened.
  */
-export const JOB_TAB_IDLE_MS = 10 * 60_000
+export const JOB_TAB_IDLE_MS = 5 * 60_000
 
 interface JobCall {
   readonly owner: string
@@ -321,8 +325,12 @@ export class HeadlessBrowserSession {
   readonly #deps: SessionDeps
   readonly #job = new AsyncLocalStorage<JobCall>()
   readonly #jobPages = new WeakSet<Page>()
-  /** When a job-apply Session last acted on each of its tabs. */
+  /** When a job-apply Session last acted on each of its tabs, or a site opened it as a popup. */
   readonly #jobTabUse = new Map<string, number>()
+  /** When each job-apply Session, by owner, last started or finished a browser call. */
+  readonly #jobOwnerUse = new Map<string, number>()
+  /** Browser calls each job-apply Session has in flight. */
+  readonly #jobInFlight = new Map<string, number>()
   readonly #jobSnapshots = new JobSnapshots()
   #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
@@ -436,7 +444,11 @@ export class HeadlessBrowserSession {
       // A keepalive's offscreen page is nobody's tab: adopting it would spend
       // one of the eight slots a person's tabs share.
       reserved: page => this.#background.has(page),
-      onAdopt: (page, owner) => this.#observePage(page, owner?.startsWith(JOB_OWNER_PREFIX) !== true),
+      onAdopt: (page, owner, id) => {
+        // A popup the site opened for a job Session is that Session's newest tab, so a code typed next goes to it.
+        if (owner?.startsWith(JOB_OWNER_PREFIX) === true) this.#jobTabUse.set(id, this.#now())
+        return this.#observePage(page, owner?.startsWith(JOB_OWNER_PREFIX) !== true)
+      },
       preparePopup: async (page, owner) => {
         if (owner?.startsWith(JOB_OWNER_PREFIX) !== true) return undefined
         try { await this.#protectJobPage(page) } catch (error: unknown) {
@@ -458,7 +470,42 @@ export class HeadlessBrowserSession {
    * @returns the invocation result.
    */
   async runJob<T>(session: string, guard: ActionGuard, run: () => Promise<T>): Promise<T> {
-    return await this.#job.run({ owner: JOB_OWNER_PREFIX + session, guard }, run)
+    const owner = JOB_OWNER_PREFIX + session
+    this.#jobOwnerUse.set(owner, this.#now())
+    this.#jobInFlight.set(owner, (this.#jobInFlight.get(owner) ?? 0) + 1)
+    try {
+      return await this.#job.run({ owner, guard }, run)
+    } finally {
+      const left = (this.#jobInFlight.get(owner) ?? 1) - 1
+      if (left === 0) this.#jobInFlight.delete(owner)
+      else this.#jobInFlight.set(owner, left)
+      this.#jobOwnerUse.set(owner, this.#now())
+    }
+  }
+
+  #now(): number {
+    return this.#deps.now?.() ?? Date.now()
+  }
+
+  /**
+   * @param owner - a tab's recorded owner.
+   * @returns whether it is a job-apply Session with no call in flight and none for {@link JOB_TAB_IDLE_MS}; one
+   * unseen since this process started (a restart ends every turn) counts as idle.
+   */
+  #jobOwnerIdle(owner: string | null | undefined): boolean {
+    if (owner?.startsWith(JOB_OWNER_PREFIX) !== true || (this.#jobInFlight.get(owner) ?? 0) > 0) return false
+    const used = this.#jobOwnerUse.get(owner)
+    return used === undefined || this.#now() - used >= (this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS)
+  }
+
+  /**
+   * @param tab - live tab id.
+   * @param caller - the scoped owner.
+   * @returns whether the caller owns the tab or may take it over from an idle job-apply Session.
+   */
+  #jobMayUse(tab: string, caller: string): boolean {
+    const owner = this.tabs().owner(tab)
+    return owner === caller || this.#jobOwnerIdle(owner)
   }
 
   /**
@@ -468,9 +515,14 @@ export class HeadlessBrowserSession {
    */
   async currentJobHost(session: string, signal?: AbortSignal): Promise<string | null> {
     signal?.throwIfAborted()
-    const tab = this.tabsState().find(entry => entry.active)
     const tabs = this.#tabs
-    if (tab === undefined || tabs === undefined || tabs.owner(tab.id) !== JOB_OWNER_PREFIX + session) return null
+    if (tabs === undefined) return null
+    // The active tab is whichever Session acted last; the code goes to the caller's own most recently used tab.
+    const owner = JOB_OWNER_PREFIX + session
+    const tab = this.tabsState()
+      .filter(entry => tabs.owner(entry.id) === owner)
+      .sort((a, b) => (this.#jobTabUse.get(b.id) ?? 0) - (this.#jobTabUse.get(a.id) ?? 0) || Number(b.active) - Number(a.active))[0]
+    if (tab === undefined) return null
     const page = await tabs.page(tab.id)
     const url = page.url()
     return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(url) ? null : safeHost(url)
@@ -502,15 +554,25 @@ export class HeadlessBrowserSession {
 
   #assertJobOwner(tab: string | undefined): void {
     const scoped = this.#job.getStore()
-    if (scoped !== undefined && (tab === undefined || this.tabs().owner(tab) !== scoped.owner)) {
-      throw new Error('the tab is not owned by this job-apply Session')
+    if (scoped === undefined) return
+    if (tab === undefined) throw new Error('the tab is not owned by this job-apply Session; name one of its tabs (headless_browser_tabs lists them)')
+    const owner = this.tabs().owner(tab)
+    if (owner === undefined) {
+      throw new Error(`tab ${tab} is closed (DSH restarted, or it sat idle and was closed for another worker); open the posting again`)
     }
-    if (scoped !== undefined && tab !== undefined) this.#jobTabUse.set(tab, Date.now())
+    if (owner !== scoped.owner) {
+      if (!this.#jobOwnerIdle(owner)) {
+        throw new Error('the tab is not owned by this job-apply Session; another job-apply Session is still working in it')
+      }
+      this.tabs().setOwner(tab, scoped.owner)
+      this.#log.info('headless-browser: %s took over idle job-apply tab %s from %s', scoped.owner, tab, owner)
+    }
+    this.#jobTabUse.set(tab, this.#now())
   }
 
   /**
-   * At the tab cap, close the job-apply tab of another Session that has gone unused longest, if it is idle enough.
-   * The owner's own tabs and tabs outside job-apply are never closed.
+   * At the tab cap, close the least recently used tab of another job-apply Session that has gone idle.
+   * A Session still making calls keeps every tab, its popups included; tabs outside job-apply are never closed.
    * @param caller - the scoped owner asking for a slot.
    * @returns whether a slot was freed.
    */
@@ -520,14 +582,15 @@ export class HeadlessBrowserSession {
     const live = new Set(open.map(tab => tab.id))
     for (const id of this.#jobTabUse.keys()) if (!live.has(id)) this.#jobTabUse.delete(id)
     if (open.length < MAX_TABS) return false
-    const idleMs = this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS
-    const now = Date.now()
     const idle = open
       .map(tab => ({ id: tab.id, owner: tabs.owner(tab.id), used: this.#jobTabUse.get(tab.id) ?? 0 }))
-      .filter(tab => tab.owner?.startsWith(JOB_OWNER_PREFIX) === true && tab.owner !== caller && now - tab.used >= idleMs)
+      .filter(tab => tab.owner !== caller && this.#jobOwnerIdle(tab.owner))
       .sort((a, b) => a.used - b.used)
     const victim = idle[0]
-    if (victim === undefined) return false
+    if (victim === undefined) {
+      this.#log.info('headless-browser: %d tabs open and none belongs to an idle job-apply Session; %s gets no slot', open.length, caller)
+      return false
+    }
     await tabs.close(victim.id)
     this.#jobTabUse.delete(victim.id)
     this.#log.info('headless-browser: closed idle job-apply tab %s to free a slot', victim.id)
@@ -551,7 +614,8 @@ export class HeadlessBrowserSession {
     const tabs = await this.tabs().list(context)
     await this.#deps.tabStore?.flush()
     const scoped = this.#job.getStore()
-    return scoped === undefined ? tabs : tabs.filter(tab => this.tabs().owner(tab.id) === scoped.owner && !deniedJobUrl(tab.url))
+    // An idle job Session's tabs are listed too: a worker sent to continue a form takes its tab over.
+    return scoped === undefined ? tabs : tabs.filter(tab => this.#jobMayUse(tab.id, scoped.owner) && !deniedJobUrl(tab.url))
   }
 
   /**
@@ -560,19 +624,35 @@ export class HeadlessBrowserSession {
    * @returns the tab's current metadata and whether it contains form controls.
    */
   async resumeTab(target: ResumeTarget): Promise<ResumedTab> {
-    this.#assertJobOwner('tab' in target ? target.tab : undefined)
+    const resolved = this.#jobResumeTarget(target)
+    this.#assertJobOwner('tab' in resolved ? resolved.tab : undefined)
     const context = await this.#launching
     if (context === undefined || this.#context !== context) {
       throw new ResumeTabError('no tab is open; reopen the page and refill the form')
     }
     try {
-      return await this.tabs().resume(context, target, (page) => {
+      return await this.tabs().resume(context, resolved, (page) => {
         this.#assertJobUrl(page.url())
         return probeResume(page, this.#navigationMethods.get(page), this.#httpErrors.get(page))
       })
     } finally {
       await this.#deps.tabStore?.flush()
     }
+  }
+
+  /**
+   * A job Session resumes by URL only among the tabs it may use, so the match cannot land on another worker's form.
+   * @param target - the tab id or URL substring the worker gave.
+   * @returns the target, with a URL resolved to one tab id inside a job-apply call.
+   */
+  #jobResumeTarget(target: ResumeTarget): ResumeTarget {
+    const scoped = this.#job.getStore()
+    if (scoped === undefined || 'tab' in target) return target
+    const matches = this.tabsState().filter(tab => tab.url.includes(target.urlSubstring) && this.#jobMayUse(tab.id, scoped.owner))
+    const [match] = matches
+    if (match === undefined) throw new ResumeTabError('no tab this job-apply Session may use matches that URL; reopen the page and refill the form')
+    if (matches.length > 1) throw new ResumeTabError('more than one tab matches that URL; use headless_browser_tabs and give a tab id')
+    return { tab: match.id }
   }
 
   #observePage(page: Page, downloads: boolean): () => void {
@@ -769,11 +849,15 @@ export class HeadlessBrowserSession {
     } catch (error: unknown) {
       // A denied landing reports only its host; a full tab strip or a page that failed to load says so.
       if (scoped !== undefined) {
+        const ownsNone = !this.tabsState().some(open => this.tabs().owner(open.id) === scoped.owner)
+        if (refused === undefined && error instanceof TabLimitError && ownsNone) {
+          throw new TabLimitError(MAX_TABS, 'every tab belongs to a Session still working; retry in a few minutes. This is browser capacity, not the employer')
+        }
         throw refused ?? (error instanceof TabLimitError || error instanceof TabNavigationError ? error : new Error('job-apply navigation failed'))
       }
       throw error
     }
-    if (scoped !== undefined) this.#jobTabUse.set(tab.id, Date.now())
+    if (scoped !== undefined) this.#jobTabUse.set(tab.id, this.#now())
     return { url: tab.url, title: tab.title, tab: tab.id }
   }
 
@@ -790,7 +874,7 @@ export class HeadlessBrowserSession {
       try {
         const scoped = this.#job.getStore()
         const closed = await this.tabs().close(tabId)
-        return scoped === undefined ? closed : { ...closed, tabs: closed.tabs.filter(tab => this.tabs().owner(tab.id) === scoped.owner) }
+        return scoped === undefined ? closed : { ...closed, tabs: closed.tabs.filter(tab => this.#jobMayUse(tab.id, scoped.owner)) }
       } finally {
         await this.#deps.tabStore?.flush()
       }
