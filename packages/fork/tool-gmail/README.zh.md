@@ -49,7 +49,7 @@ kind: "package-reference"
 
 完整模式和收件箱模式都把收到的邮件显示为不可信数据。在完整模式中，`gmail_send` 通过 `turn-taint` 读取调用方 Session 的这一轮来源和主人的原话；Gmail 服务决定是否发信。只有完整模式可以保存附件，路径按 Session 的工作目录解析。
 
-验证模式在查信前后都检查调用方 Session 浏览器当前标签页的主机名。按浏览器使用的公共后缀规则计算，发件人的可注册域名必须与标签页匹配，或属于预先固定的 Workday 或 Greenhouse 别名；这两家会把别名里的每个域名都查一遍，因为 Workday 的验证码来自 `otp.workday.com`，账号验证链接来自 `myworkday.com`。Oracle Cloud HCM、Taleo 和 Salesforce Sites（`my.salesforce-sites.com`、`my.site.com`、`force.com`）的租户用雇主自己的域名发信（Sage 的 fRecruit 表单从 `careers.sage.com` 发信），在这几类站点上，发件人也可以是调用方在当前标签页同一主机上打开的任一页面链接到的域名（Tenet 的 Oracle 职位页链接到 `tenethealth.com`，申请步骤页不链接任何站点），但招聘平台、账号平台和其他 ATS 厂商除外；这时邮件里的链接也可以指回该 ATS 站点。如果那里打开的页面都没有链接到该发件人，`domain_mismatch` 结果会附带 `hint`，提示在第二个标签页打开职位页后再查一次。名单内的私有服务及其子域名都不能作为发件域名或验证链接域名，包括常见身份验证、银行、支付和主人的 API 域名；这份有限名单不能覆盖所有敏感服务。链接必须使用 HTTPS，且与发件人的可注册域名或其固定别名匹配。
+验证模式在查信前后都检查调用方 Session 浏览器当前标签页的主机名。按浏览器使用的公共后缀规则计算，发件人的可注册域名必须与标签页匹配，或属于预先固定的 Workday 或 Greenhouse 别名；这两家会把别名里的每个域名都查一遍，因为 Workday 的验证码来自 `otp.workday.com`，账号验证链接来自 `myworkday.com`。Oracle Cloud HCM、Taleo 和 Salesforce Sites（`my.salesforce-sites.com`、`my.site.com`、`force.com`）的租户用雇主自己的域名发信（Sage 的 fRecruit 表单从 `careers.sage.com` 发信），在这几类站点上，发件人也可以是调用方在当前标签页同一主机上打开的任一页面链接到的域名（Tenet 的 Oracle 职位页链接到 `tenethealth.com`，申请步骤页不链接任何站点），但招聘平台、账号平台和其他 ATS 厂商除外；这时邮件里的链接也可以指回该 ATS 站点。如果那里打开的页面都没有链接到该发件人，`domain_mismatch` 结果会附带 `hint`，提示在第二个标签页打开职位页后再查一次。Eightfold 在雇主自己域名上运营的招聘站点从 `eightfold.ai` 发信（Qualcomm 的 `careers.qualcomm.com`），因此只要该主机上打开的页面链接到它（页脚的“Powered by eightfold.ai”就是），这个发件域名也按同样方式接受。名单内的私有服务及其子域名都不能作为发件域名或验证链接域名，包括常见身份验证、银行、支付和主人的 API 域名；这份有限名单不能覆盖所有敏感服务。链接必须使用 HTTPS，且与发件人的可注册域名或其固定别名匹配。
 
 | 文件 | 作用 |
 |---|---|

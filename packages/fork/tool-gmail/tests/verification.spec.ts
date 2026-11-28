@@ -165,7 +165,7 @@ describe('verification-only mode', () => {
     })
     expect((await h.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value).toMatchObject({ found: true, from_domain: 'tenethealth.com' })
     expect(h.linkedHosts).toHaveBeenCalledWith('job-session', expect.anything())
-    expect(h.logs).toContain('tool-gmail: gmail_verification_code employer sender %s vouched by the %s page')
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code sender %s vouched by the %s page')
   })
 
   it.each([
@@ -174,6 +174,7 @@ describe('verification-only mode', () => {
     ['sagehr.my.salesforce-sites.com', 'salesforce.com', ['www.salesforce.com']],
     ['tenant.wd1.myworkdayjobs.com', 'employer.example', ['www.employer.example']],
     ['careers.example.co.uk', 'employer.example', ['www.employer.example']],
+    ['careers.qualcomm.com', 'onetrust.com', ['www.onetrust.com']],
   ])('refuses on %s the sender %s that the page does not vouch for', async (host, sender_domain, links) => {
     const h = await mount(host, true, 'verification-only', links)
     expect((await h.invoke({ ...ARGS, sender_domain })).value).toEqual(MISMATCH)
@@ -189,6 +190,24 @@ describe('verification-only mode', () => {
       return { ...RESULT, domain: 'sage.com' }
     })
     expect((await h.invoke({ ...ARGS, sender_domain: 'careers.sage.com' })).value).toMatchObject({ found: true, from_domain: 'sage.com' })
+  })
+
+  it('accepts the ATS vendor sender an employer careers site links to, as Qualcomm\'s Eightfold site mails from eightfold.ai', async () => {
+    // Live Qualcomm account verification at careers.qualcomm.com, 2026-11-27 22:23: the code came from confirm@eightfold.ai,
+    // and the site's footer links "Powered by eightfold.ai".
+    const h = await mount('careers.qualcomm.com', true, 'verification-only', ['www.qualcomm.com', 'careers.qualcomm.com', 'eightfold.ai', 'www.onetrust.com'])
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domain).toBe('eightfold.ai')
+      expect(lookup.allowsLinkHost('careers.qualcomm.com')).toBe(true)
+      expect(lookup.allowsLinkHost('app.eightfold.ai')).toBe(true)
+      expect(lookup.allowsLinkHost('evil.example')).toBe(false)
+      return { ...RESULT, domain: 'eightfold.ai' }
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toMatchObject({ found: true, from_domain: 'eightfold.ai' })
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code sender %s vouched by the %s page')
+    const bare = await mount('careers.qualcomm.com', true, 'verification-only', ['www.qualcomm.com'])
+    expect((await bare.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') })
+    expect(bare.gmail.verificationCode).not.toHaveBeenCalled()
   })
 
   it('tells the caller to open the posting page when no open Oracle page links to the employer sender', async () => {
