@@ -171,12 +171,24 @@ describe('verification-only mode', () => {
   it.each([
     ['eodr.fa.us2.oraclecloud.com', 'linkedin.com', ['www.linkedin.com']],
     ['eodr.fa.us2.oraclecloud.com', 'myworkday.com', ['www.myworkday.com']],
+    ['sagehr.my.salesforce-sites.com', 'salesforce.com', ['www.salesforce.com']],
     ['tenant.wd1.myworkdayjobs.com', 'employer.example', ['www.employer.example']],
     ['careers.example.co.uk', 'employer.example', ['www.employer.example']],
   ])('refuses on %s the sender %s that the page does not vouch for', async (host, sender_domain, links) => {
     const h = await mount(host, true, 'verification-only', links)
     expect((await h.invoke({ ...ARGS, sender_domain })).value).toEqual(MISMATCH)
     expect(h.gmail.verificationCode).not.toHaveBeenCalled()
+  })
+
+  it('accepts the employer sender a Salesforce Site links to, as Sage mails from careers.sage.com', async () => {
+    // Live Sage fRecruit form, 2026-11-27 20:15: the worker asked for the ATS domain and found nothing.
+    const h = await mount('sagehr.my.salesforce-sites.com', true, 'verification-only', ['www.sage.com', 'www.sagepeople.com', 'www.linkedin.com'])
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domain).toBe('sage.com')
+      expect(lookup.domainOf('careers.sage.com')).toBe('sage.com')
+      return { ...RESULT, domain: 'sage.com' }
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'careers.sage.com' })).value).toMatchObject({ found: true, from_domain: 'sage.com' })
   })
 
   it('tells the caller to open the posting page when no open Oracle page links to the employer sender', async () => {

@@ -23,14 +23,17 @@ const ATS_ALIASES: readonly (readonly string[])[] = [
  * Enterprise ATS sites whose tenants mail candidates from the employer's own domain: Tenet's Oracle Cloud HCM page at
  * eodr.fa.us2.oraclecloud.com sent its code from tenethealth.com (2026-11-27). There the sender may be a domain the
  * caller's open pages on that host link to: the posting page links www.tenethealth.com, the application step does not.
+ * Salesforce Sites hosts (my.salesforce-sites.com, my.site.com, force.com) are the same: Sage's fRecruit form at
+ * sagehr.my.salesforce-sites.com mails from careers@careers.sage.com and links www.sage.com.
  */
-const EMPLOYER_MAIL_ATS = new Set(['oraclecloud.com', 'taleo.net'])
+const EMPLOYER_MAIL_ATS = new Set(['oraclecloud.com', 'taleo.net', 'salesforce-sites.com', 'site.com', 'force.com'])
 
 /** Account platforms an ATS page never vouches for, so a hostile tenant cannot relay their sign-in codes. */
 const UNVOUCHED_DOMAINS = new Set([
   'linkedin.com', 'joinhandshake.com', 'indeed.com', 'glassdoor.com', 'amazon.com', 'amazon.dev', 'facebook.com', 'meta.com',
   'instagram.com', 'x.com', 'twitter.com', 'okta.com', 'auth0.com', 'duosecurity.com', 'dropbox.com', 'slack.com', 'zoom.us',
   'workday.com', 'myworkday.com', 'myworkdayjobs.com', 'greenhouse.io', 'lever.co', 'ashbyhq.com', 'icims.com',
+  'salesforce.com', 'salesforce-sites.com', 'site.com', 'force.com', 'oracle.com', 'oraclecloud.com', 'taleo.net',
 ])
 
 // This is a finite private-service denylist, not a classification of every bank or identity provider.
@@ -159,7 +162,7 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
   }))
   ctx.tools.register(defineTool({
     name: 'gmail_verification_code',
-    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched; on Oracle Cloud HCM or Taleo it may also be the employer domain that one of your open pages on that host links to (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
+    description: 'Find a recent 4–8 digit sign-in or verification code, or a verification link if there is no code, for the active job application tab. The sender domain must belong to that live site or a pinned ATS-owned alias; for Workday or Greenhouse every alias domain is searched; on Oracle Cloud HCM, Taleo or a Salesforce Site it may also be the employer domain that one of your open pages on that host links to (open the posting page in a second tab if the application step links nowhere). Sensitive sender domains are refused. Only the code or link, sender domain, receipt time and ambiguity flag are returned; if ambiguous, check with the owner rather than guessing. Do not share the code or link; use them only to complete verification on the matching job application site.',
     parameters: {
       account: { type: 'string', required: true, description: 'Account id from gmail_accounts.' },
       sender_domain: { type: 'string', required: true, description: 'Expected sender domain, not a URL or email address.' },

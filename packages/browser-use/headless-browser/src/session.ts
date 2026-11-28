@@ -1615,7 +1615,9 @@ export class HeadlessBrowserSession {
   #authorizeTarget(url: string, facts?: ElementFacts): void {
     if (this.#job.getStore() === undefined) return
     this.#assertJobUrl(url)
-    if (facts?.href != null) this.#assertJobUrl(facts.href)
+    // A javascript: link runs the page's own script, as a button does (Tenet's Oracle "Application Questions" link);
+    // whatever it then loads meets the network deny list.
+    if (facts?.href != null && URL.parse(facts.href)?.protocol !== 'javascript:') this.#assertJobUrl(facts.href)
     if (facts?.formAction != null) {
       this.#assertJobUrl(facts.formAction)
       const decision = this.#activeGuard().decideNavigation({ action: 'open', url, target: facts.formAction, allowOrigin: false })
