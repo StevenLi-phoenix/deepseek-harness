@@ -126,9 +126,19 @@ const JOB_OWNER_PREFIX = 'job-apply:'
  * Session's open may close its tabs, and another job-apply Session may take one over, as a worker the lead sends to
  * continue a form does. Workers act every few seconds; waiting for an emailed code is the longest pause, about two
  * minutes. On 2026-11-27 finished workers' tabs filled the eight shared slots, and a lease measured per tab instead of
- * per Session closed a worker's Apply popup one second after it opened.
+ * per Session closed a worker's Apply popup one second after it opened. A Session still working may also lose a side
+ * tab it has not used this long, but never its current tab or a tab that opened another still open.
  */
 export const JOB_TAB_IDLE_MS = 5 * 60_000
+
+/** One open tab as the tab-cap check weighs it. */
+interface SlotRow {
+  readonly id: string
+  readonly url: string
+  readonly owner: string | null | undefined
+  /** When a job-apply call last used the tab; 0 when none has. */
+  readonly used: number
+}
 /** How long reading a job page's links may take before it counts as none. */
 const JOB_LINK_READ_MS = 2_000
 
@@ -684,8 +694,12 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * At the tab cap, close the least recently used tab of another job-apply Session that has gone idle.
-   * A Session still making calls keeps every tab, its popups included; tabs outside job-apply are never closed.
+   * At the tab cap, close one tab for a job-apply Session, first match wins: an unclaimed blank page, which holds
+   * nothing; the least recently used tab of another job-apply Session that has gone idle; then the least recently
+   * used side tab of a job-apply Session still working, the caller's own included. One LinkedIn search worker kept
+   * seven employer pages open while it worked, and every apply worker was told the strip was full (2026-11-27).
+   * A working Session keeps its current tab, every tab it used in the last {@link JOB_TAB_IDLE_MS}, and the opener of
+   * any tab it still has; tabs outside job-apply are never closed.
    * @param caller - the scoped owner asking for a slot.
    * @returns whether a slot was freed.
    */
@@ -695,19 +709,45 @@ export class HeadlessBrowserSession {
     const live = new Set(open.map(tab => tab.id))
     for (const id of this.#jobTabUse.keys()) if (!live.has(id)) this.#jobTabUse.delete(id)
     if (open.length < MAX_TABS) return false
-    const idle = open
-      .map(tab => ({ id: tab.id, owner: tabs.owner(tab.id), used: this.#jobTabUse.get(tab.id) ?? 0 }))
-      .filter(tab => tab.owner !== caller && this.#jobOwnerIdle(tab.owner))
+    const rows: SlotRow[] = open
+      .map(tab => ({ id: tab.id, url: tab.url, owner: tabs.owner(tab.id), used: this.#jobTabUse.get(tab.id) ?? 0 }))
       .sort((a, b) => a.used - b.used)
-    const victim = idle[0]
+    const blank = rows.find(tab => tab.owner === null && tab.url === 'about:blank')
+    const idle = rows.find(tab => tab.owner !== caller && this.#jobOwnerIdle(tab.owner))
+    const victim = blank ?? idle ?? await this.#staleJobTab(rows)
     if (victim === undefined) {
-      this.#log.info('headless-browser: %d tabs open and none belongs to an idle job-apply Session; %s gets no slot', open.length, caller)
+      this.#log.info('headless-browser: %d tabs open and none is blank, idle or a stale job-apply side tab; %s gets no slot', open.length, caller)
       return false
     }
     await tabs.close(victim.id)
     this.#jobTabUse.delete(victim.id)
-    this.#log.info('headless-browser: closed idle job-apply tab %s to free a slot', victim.id)
+    if (victim === blank) this.#log.info('headless-browser: closed unclaimed blank tab %s to free a slot', victim.id)
+    else if (victim === idle) this.#log.info('headless-browser: closed idle job-apply tab %s to free a slot', victim.id)
+    else this.#log.info('headless-browser: closed stale side tab %s of working %s to free a slot', victim.id, String(victim.owner))
     return true
+  }
+
+  /**
+   * @param rows - the open tabs with their owners, least recently used first.
+   * @returns the first tab a working job-apply Session has left behind: unused for {@link JOB_TAB_IDLE_MS}, not that
+   *   Session's most recently used tab, and not the opener of a tab still open; nothing when no tab qualifies.
+   */
+  async #staleJobTab(rows: readonly SlotRow[]): Promise<SlotRow | undefined> {
+    const tabs = this.tabs()
+    const jobRows = rows.filter(row => row.owner?.startsWith(JOB_OWNER_PREFIX) === true)
+    const current = new Map<string, SlotRow>()
+    for (const row of jobRows) if (row.owner !== null && row.owner !== undefined) current.set(row.owner, row)
+    const openers = new Set<Page>()
+    for (const row of rows) {
+      const opener = await (await tabs.page(row.id)).opener()
+      if (opener !== null) openers.add(opener)
+    }
+    const before = this.#now() - (this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS)
+    for (const row of jobRows) {
+      if (row.used > before || current.get(row.owner ?? '') === row) continue
+      if (!openers.has(await tabs.page(row.id))) return row
+    }
+    return undefined
   }
 
   /** At plugin boot, reconcile a previous run's open tabs immediately; otherwise launch on demand. */
