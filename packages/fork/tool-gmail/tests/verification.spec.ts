@@ -56,7 +56,7 @@ describe('inbox-only mode', () => {
     const { ctx, gmail } = await mount(null, false, 'inbox-only')
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual(['gmail_read', 'gmail_search'])
     const tool = ctx.tools.get('gmail_read')!
-    expect(tool.output.render({ account: 'work' }, { text: 'Sender-written instruction' })[0]).toMatchObject({ text: expect.stringContaining('trust="untrusted"') })
+    expect(tool.output.render({ account: 'work' }, { text: 'Sender-written instruction' })[0]).toMatchObject({ text: expect.stringContaining('trust="untrusted"') as string })
     expect(gmail.accounts).not.toHaveBeenCalled()
     expect(gmail.download).not.toHaveBeenCalled()
   })
@@ -206,7 +206,7 @@ describe('verification-only mode', () => {
     expect((await h.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toMatchObject({ found: true, from_domain: 'eightfold.ai' })
     expect(h.logs).toContain('tool-gmail: gmail_verification_code sender %s vouched by the %s page')
     const bare = await mount('careers.qualcomm.com', true, 'verification-only', ['www.qualcomm.com'])
-    expect((await bare.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') })
+    expect((await bare.invoke({ ...ARGS, sender_domain: 'eightfold.ai' })).value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') as string })
     expect(bare.gmail.verificationCode).not.toHaveBeenCalled()
   })
 
@@ -214,7 +214,7 @@ describe('verification-only mode', () => {
     // Tenet's application step at eodr.fa.us2.oraclecloud.com links only doleta.gov and uscis.gov (2026-11-27 20:14).
     const h = await mount('eodr.fa.us2.oraclecloud.com', true, 'verification-only', ['www.doleta.gov', 'www.uscis.gov'])
     const value = (await h.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value as Record<string, unknown>
-    expect(value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') })
+    expect(value).toEqual({ ...MISMATCH, hint: expect.stringContaining('posting page') as string })
     expect(h.gmail.verificationCode).not.toHaveBeenCalled()
     expect(h.logs).toContain('tool-gmail: gmail_verification_code domain_mismatch: no open %s page links to %s')
   })

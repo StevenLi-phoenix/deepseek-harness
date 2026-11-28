@@ -64,7 +64,6 @@ function postingUrl(value: string): string {
  * @returns The endpoint selector and JSON payload.
  */
 export function trackerCall(args: TrackerArguments): ['add_application' | 'update_application', string] {
-  if (args.operation !== 'append' && args.operation !== 'update') throw new Error('Unsupported tracker operation.')
   const company = validateText(args.company, 'company', 180)
   const role = validateText(args.role, 'role', 240)
   const url = postingUrl(args.url)

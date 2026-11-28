@@ -97,7 +97,8 @@ async function connect(options: LookupOptions, signal = new AbortController().si
   publicDispatcher(new URL('https://jobs.example.com/'), signal)
   const lookup = mocks.connector.mock.calls.at(-1)?.[0]
   if (lookup === undefined) throw new Error('no dispatcher was created')
-  return await new Promise<{ error: NodeJS.ErrnoException | null; address: string | LookupAddress[]; family?: number }>((resolve) => {
+  type Answer = { error: NodeJS.ErrnoException | null; address: string | LookupAddress[]; family: number | undefined }
+  return await new Promise<Answer>((resolve) => {
     lookup('jobs.example.com', options, (error, address, family) => { resolve({ error, address, family }) })
   })
 }
