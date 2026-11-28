@@ -59,6 +59,8 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`tool-monitor/`](tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`tool-up/`](tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |
 | [`tool-voice/`](tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |
+| [`voice-call/`](voice-call/README.md) | Voice line to the owner's phone, disabled by default: a VoIP push rings the DSH Call iOS app through CallKit, and a full-duplex WebRTC call over Tailscale talks with a call Session, with barge-in (`ctx.voiceCall`) |
+| [`tool-voice-call/`](tool-voice-call/README.md) | `call_owner` tool: the agent phones the owner, waits for the call to end, and gets the outcome and transcript |
 | [`cc-bridge/`](cc-bridge/README.md) | `cc_list_sessions`, `cc_send`, `cc_start`, `cc_stop` tools: work with Claude Code sessions of the agent's own account |
 | [`tool-qq/`](tool-qq/README.md) | `qq_groups`, `qq_digest`, `qq_recent`, `qq_search` tools: the agent reads what the QQ observer recorded and digested |
 | [`tool-watch/`](tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches; `flow_read`, `flow_edit`: it changes the whole notification flow |

@@ -30,6 +30,7 @@ flowchart LR
   pkg_notify_learning["notify-learning"]
   pkg_tool_voice["tool-voice"]
   pkg_tool_wechat["tool-wechat"]
+  pkg_voice_call["voice-call"]
   pkg_owner_relay["owner-relay"]
   svc_ownerRelay["ctx.ownerRelay<br/>Relay of final answers to the owner"]
   pkg_bili["bili"]
@@ -48,6 +49,8 @@ flowchart LR
   pkg_qq_login["qq-login"]
   pkg_speaking_style["speaking-style"]
   svc_qqBot["ctx.qqBot<br/>Official QQ bot channel"]
+  svc_voiceCall["ctx.voiceCall<br/>Voice line to the owner's phone"]
+  pkg_tool_voice_call["tool-voice-call"]
   svc_speakingStyle["ctx.speakingStyle<br/>Speaking style"]
   pkg_speaking_style_settings["speaking-style-settings"]
   svc_notifyLearning["ctx.notifyLearning<br/>Notification rules learned from the owner"]
@@ -578,6 +581,7 @@ flowchart LR
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
   pkg_voice --> svc_voice
+  pkg_voice_call --> svc_voiceCall
   pkg_web --> svc_web
   pkg_web_app --> svc_webApp
   pkg_web_deepseek_api --> svc_web
@@ -690,11 +694,13 @@ flowchart LR
   svc_ownerNotifier --> pkg_tool_voice
   svc_ownerNotifier --> pkg_tool_watch
   svc_ownerNotifier --> pkg_tool_wechat
+  svc_ownerNotifier --> pkg_voice_call
   svc_ownerRelay --> pkg_bili
   svc_ownerRelay --> pkg_event_bus
   svc_ownerRelay --> pkg_notify_learning
   svc_ownerRelay --> pkg_qqbot
   svc_ownerRelay --> pkg_time_gap
+  svc_ownerRelay --> pkg_voice_call
   svc_ownerRelay --> pkg_wechat
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginMarket --> pkg_client_ui_plugin_market
@@ -703,6 +709,7 @@ flowchart LR
   svc_pluginRegistryProbe --> pkg_client_ui_plugin_manager
   svc_presence --> pkg_courses
   svc_presence --> pkg_event_console
+  svc_presence --> pkg_voice_call
   svc_presence --> pkg_wechat
   svc_profileContext --> pkg_plugin_manager
   svc_ptcRuntime --> pkg_tool_executor_ptc
@@ -796,7 +803,9 @@ flowchart LR
   svc_userQuestions --> pkg_tool_ask_user
   svc_voice --> pkg_event_console
   svc_voice --> pkg_tool_voice
+  svc_voice --> pkg_voice_call
   svc_voice --> pkg_wechat
+  svc_voiceCall --> pkg_tool_voice_call
   svc_web --> pkg_tool_web
   svc_webApp --> pkg_harness_dev_context
   svc_webServer --> pkg_client_connection
@@ -828,18 +837,19 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.remoteConnection` | `service` | [`client-remote-connection`](../packages/client/remote-connection) | - | - | - | 管理二维码邀请、获批的配对申请、Remote 浏览器凭据和匿名登录文档；Client 提供审批控件及独立的 Token 链接入口。 |
 | `ctx.eventBus` | `service` | [`event-bus`](../packages/fork/event-bus) | - | [`event-ingest`](../packages/fork/event-ingest), [`github-sensor`](../packages/fork/github-sensor), [`qq`](../packages/fork/qq), [`qqbot`](../packages/fork/qqbot), [`tool-monitor`](../packages/fork/tool-monitor), [`tool-up`](../packages/fork/tool-up), [`tool-watch`](../packages/fork/tool-watch), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 负责去重、路由、批次和通知流程；传感器发布事件，工具修改路由。 |
-| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`notify-learning`](../packages/fork/notify-learning), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
-| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap), [`notify-learning`](../packages/fork/notify-learning) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
-| `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console) | - | 把睡眠专注模式、每日时段和手动按钮合成一个状态。 |
+| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`notify-learning`](../packages/fork/notify-learning), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat), [`voice-call`](../packages/fork/voice-call) | - | 事件总线定义通道接口，微信通道提供实现。 |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap), [`notify-learning`](../packages/fork/notify-learning), [`voice-call`](../packages/fork/voice-call) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
+| `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console), [`voice-call`](../packages/fork/voice-call) | - | 把睡眠专注模式、每日时段和手动按钮合成一个状态。 |
 | `ctx.githubSensor` | `service` | [`github-sensor`](../packages/fork/github-sensor) | - | [`tool-watch`](../packages/fork/tool-watch), [`event-console`](../packages/fork/event-console) | - | 轮询并接收 GitHub 投递，发布到事件总线。 |
 | `ctx.courses` | `service` | [`courses`](../packages/fork/courses) | - | [`tool-courses`](../packages/fork/tool-courses), [`courses-settings`](../packages/fork/courses-settings) | - | 读取课程服务并发送截止提醒。 |
 | `ctx.gmail` | `service` | [`gmail`](../packages/fork/gmail) | - | [`tool-gmail`](../packages/fork/tool-gmail), [`gmail-settings`](../packages/fork/gmail-settings) | - | 读取并发送主人的 Gmail；发信可先留给主人确认。 |
 | `ctx.qq` | `service` | [`qq`](../packages/fork/qq) | - | [`tool-qq`](../packages/fork/tool-qq), [`qq-login`](../packages/fork/qq-login), [`speaking-style`](../packages/fork/speaking-style), [`event-console`](../packages/fork/event-console) | - | qq-recorder 服务的客户端；写群摘要并响应检索。 |
 | `ctx.qqBot` | `service` | [`qqbot`](../packages/fork/qqbot) | - | - | - | 持有官方机器人连接；没有其他包调用它。 |
+| `ctx.voiceCall` | `service` | [`voice-call`](../packages/fork/voice-call) | - | [`tool-voice-call`](../packages/fork/tool-voice-call) | - | 通过 VoIP 推送呼叫 DSH Call app，经由通话 Session 用 WebRTC 和主人通话。 |
 | `ctx.speakingStyle` | `service` | [`speaking-style`](../packages/fork/speaking-style) | - | [`speaking-style-settings`](../packages/fork/speaking-style-settings), [`event-console`](../packages/fork/event-console) | - | 从 QQ、B 站和公开网页收集风格，并展示给挂载它的 preset。 |
 | `ctx.notifyLearning` | `service` | [`notify-learning`](../packages/fork/notify-learning) | - | - | - | 保存主动消息和 owner 的回复，每晚学习规则，并提供规则块和它的工具行。 |
 | `ctx.contentGuard` | `service` | [`content-guard`](../packages/fork/content-guard) | - | [`qq`](../packages/fork/qq), [`speaking-style`](../packages/fork/speaking-style), [`tool-up`](../packages/fork/tool-up) | - | 用模式、金丝雀、记忆重合和模型检查他人可读的文本，失败即拒绝。 |
-| `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 调用语音和转写服务，返回文件或文字。 |
+| `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console), [`voice-call`](../packages/fork/voice-call) | - | 调用语音和转写服务，返回文件或文字。 |
 | `ctx.claudeCodeSessions` | `service` | [`cc-admin`](../packages/fork/cc-admin) | - | [`event-console`](../packages/fork/event-console) | - | 为设置页面列出并启动服务账号的 Claude Code 会话。 |
 | `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`speaking-style`](../packages/fork/speaking-style) | - | bili-svc 的轻量客户端；bili-svc 持有登录态并写入 B 站。 |
 | `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`speaking-style`](../packages/fork/speaking-style) | - | 通过 bili-svc 读取热门视频。 |

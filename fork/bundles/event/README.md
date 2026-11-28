@@ -75,6 +75,7 @@ The profile applies every layer's patch as one flattened list in the order `dsh.
 | `@deepseek-ai/courses` | course records and the deadline poller | `ctx.presence` for quiet hours |
 | `@deepseek-ai/gmail` | Gmail accounts, Settings → 邮箱 | the `tool-gmail` row |
 | `@deepseek-ai/qqbot` | official QQ bot channel, preset `qqbot` | owner-relay channel `qqbot` |
+| `@deepseek-ai/voice-call` | voice line to the owner's iPhone (disabled by default), preset `voice-call` | owner-relay channel `voice-call`, the `tool-voice-call` row |
 | `@deepseek-ai/integrity` | integrity watch | — |
 | `@deepseek-ai/guard` | `ctx.contentGuard`, Settings view | every writer of public text |
 | `@deepseek-ai/style` | speaking style, Settings → 说话风格 | `ctx.contentGuard`, the QQ and Bilibili reads it mines |
@@ -89,9 +90,9 @@ The profile applies every layer's patch as one flattened list in the order `dsh.
 
 Each feature bundle's `cordis.patch.yml` holds the rows this file used to hold, verbatim and in the same relative order; `fork/bundles/event/cordis.patch.yml` keeps the skeleton rows and the root overrides. A test compares the composed layers with the old single-file composition, so a row cannot be lost or changed silently.
 
-A preset stays whole in one layer. An agent preset's plugins are a config value (`config.plugins`), not a group the patch engine indexes, so a later layer cannot insert into a preset: the feature presets (`bili`, `up`, `qqbot`, `qq-digest`, `qq-main`) travel with their feature, and the two service-wide ones (`notify`, `unattended`) stay here.
+A preset stays whole in one layer. An agent preset's plugins are a config value (`config.plugins`), not a group the patch engine indexes, so a later layer cannot insert into a preset: the feature presets (`bili`, `up`, `qqbot`, `voice-call`, `qq-digest`, `qq-main`) travel with their feature, and the two service-wide ones (`notify`, `unattended`) stay here.
 
-The `unattended` preset names the tools of several features (`tool-qq`, `tool-courses`, `tool-gmail`, `tool-voice`, `cc-bridge`, `tool-monitor`). Those rows stay in the skeleton with the preset, because they cannot be patched into it from another layer. Dropping a feature bundle therefore means dropping its tool row from `preset-unattended` as well.
+The `unattended` preset names the tools of several features (`tool-qq`, `tool-courses`, `tool-gmail`, `tool-voice`, `tool-voice-call`, `cc-bridge`, `tool-monitor`). Those rows stay in the skeleton with the preset, because they cannot be patched into it from another layer. Dropping a feature bundle therefore means dropping its tool row from `preset-unattended` as well.
 
 The bus keeps every subscription. Routing is the service's, not a feature's: a subscription names the preset or the source it needs, and a feature that is not mounted simply never triggers its own subscription.
 

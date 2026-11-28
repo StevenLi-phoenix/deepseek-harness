@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "音声通話回線",
+    "description": "DSH Call アプリでオーナーの iPhone を鳴らし、Tailscale 経由でオーナーと通話セッションの間で全二重の音声通話を行います。"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "语音通话线路",
+    "description": "通过 DSH Call app 让主人的 iPhone 响铃，经 Tailscale 在主人和一个通话会话之间进行全双工语音通话。"
+  }
+}

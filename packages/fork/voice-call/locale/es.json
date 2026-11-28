@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Línea de llamadas de voz",
+    "description": "Hace sonar el iPhone del propietario mediante la app DSH Call y mantiene una llamada de voz dúplex completa entre el propietario y una sesión de llamada a través de Tailscale."
+  }
+}

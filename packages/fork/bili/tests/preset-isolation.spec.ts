@@ -48,9 +48,11 @@ const WECHAT_PRESET = 'unattended'
 const OUTSIDE_PRESETS = ['bili', 'up', 'qqbot', 'qq-digest'] as const
 /**
  * Every preset that must carry no owner memory and no WeChat-side tool: the outside presets and `notify`, the notification
- * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer).
+ * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer), and
+ * `voice-call`, a phone call's Session (the owner's speech in, spoken answers out, no tools; the main Session
+ * acts on its transcript).
  */
-const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main'] as const
+const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main', 'voice-call'] as const
 /**
  * The job pipeline reads postings and recruiter mail, which can carry prompt injection. Its presets carry no owner
  * memory and reach the owner only through their final answer; Gmail and WeChat appear only in narrowed modes.
@@ -105,6 +107,11 @@ const ALLOWED: Record<(typeof NO_MEMORY_PRESETS)[number], string[]> = {
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   'qq-main': [
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
+    'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
+  ],
+  // A call Session: what the owner says on the phone, spoken back. Nothing that acts, nothing of the owner's memory.
+  'voice-call': [
     '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],

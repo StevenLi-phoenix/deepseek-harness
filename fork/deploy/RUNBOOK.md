@@ -610,6 +610,36 @@ The send gate guards the tools, not the account: the tokens are readable by `dsh
 
 The fork's packages, services, storage domains, data directories, env names, and routes are named by what they do (fork/CHANGELOG.md has the list). A host that ran an older build moves its data once, with the service stopped: each data directory under `$DSH_HOME` and each storage file under `$DSH_HOME/storages/` gets its new name (a storage file also names its domain in its `"unit"` header, and the QQ store holds absolute paths into its directories), the env names in `.env` and the AMS secrets of `qq-recorder` and `disk-watch` are copied to their new names, the owner patch's row ids follow the bundle's, and `setup-profile.sh` then drops the profile's links to the old package names. While callers move, the old ingest path can stay served by an `event-ingest` row in the owner patch that lists it under `aliases`; because a patch row replaces the whole `config`, that row restates the bundle's `sources`. Once every caller posts to `/hooks/events`, delete the row, which leaves the bundle's row serving `/hooks/events` alone, and delete the old env names and AMS secret names, which nothing reads after the copy. The app directory is `/Users/Shared/dsh`; an installed LaunchDaemon that still names the old directory runs through a compat symlink there until the plist is reinstalled from `deploy/app.lishuyu.dsh-events.plist`. Sessions recorded before the rename keep their old source kinds as attributions; turn-taint and time-gap read the old spellings of `tool-monitor` and `untrusted:` like the new ones.
 
+## 31. Voice calls with DSH Call (disabled by default)
+
+`voice-call` lets the main agent phone the owner (`call_owner`) and the owner phone the agent from the DSH Call iOS app (`fork/apps/voice-call-ios`). A VoIP push through Apple rings the phone through CallKit; the call itself is WebRTC between the phone and this Mac over the tailnet, with no telephone network. The bundle carries the row with `disabled: true`, so a stock install loads nothing, sends no push, and answers every `/voice-call/v1/` request with 503.
+
+To enable it:
+
+1. Apple (you, in the Apple Developer account): register an App ID for the app's bundle identifier with Push Notifications, and create an APNs auth key (Keys → Apple Push Notifications service). Download the `.p8` once and note its Key ID and the Team ID.
+2. Build and install the app on your iPhone from Xcode with that bundle identifier and your team, as `fork/apps/voice-call-ios/README.md` describes. A development build registers with the sandbox push environment, a TestFlight build with production; the app reports which.
+3. Secrets (typed in your terminal, never pasted into a chat): the key file goes next to `.env`, and four names go into `.env`:
+   ```sh
+   sudo install -o dsh-runtime -m 600 ~/Downloads/AuthKey_<KEYID>.p8 /Users/dsh-runtime/.dsh/voice-call-apns.p8
+   cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -r "k?APNs Key ID: "; read -r "t?Team ID: "; v=$(/usr/bin/openssl rand -hex 32); { /usr/bin/grep -v -e "^VOICE_CALL_" $f 2>/dev/null; print -r -- "VOICE_CALL_APNS_KEY_ID=$k"; print -r -- "VOICE_CALL_APNS_TEAM_ID=$t"; print -r -- "VOICE_CALL_APNS_KEY=/Users/dsh-runtime/.dsh/voice-call-apns.p8"; print -r -- "VOICE_CALL_TOKEN=$v"; } >| $f.new && /bin/mv -f $f.new $f && /bin/ls -l $f && /usr/bin/cut -d= -f1 $f'
+   ```
+   Read the token once to enter it in the app: `sudo -u dsh-runtime /usr/bin/sed -n 's/^VOICE_CALL_TOKEN=//p' /Users/dsh-runtime/.dsh/.env`.
+4. In `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml` add
+   ```yaml
+   - id: voice-call
+     disabled: false
+     config:
+       apns:
+         bundleId: <the app's bundle identifier>
+       ice:
+         bindAddress: <this Mac's Tailscale IPv4, `tailscale ip -4`>
+   ```
+   and restart (`sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events`), because `.env` is read at launch. `tool-voice-call` registers `call_owner` in the unattended preset once the line is mounted.
+5. In the app, tap **Settings** (the gear): enter the HTTPS address of §10 (`https://dsh.<tailnet>.ts.net`) and the token, tap **Save**, then **Check connection** (it shows Voice calls On) and **Register**. Call DSH from the app to check both directions; the call shows up as a `通话` Session in the Web UI.
+6. Disable it again: set `disabled: true` (or remove the entry), delete the `VOICE_CALL_*` lines from `.env` and the `.p8` file, and revoke the key in the Apple Developer account if it leaked.
+
+Media uses UDP straight to `ice.bindAddress`; if the macOS firewall blocks incoming connections for `node`, allow it, or set `ice.minPort`/`ice.maxPort` to a range you allow. Speech runs on the phone by default (`speech.stt`/`speech.tts: device`); `server` uses `ctx.voice` of §13 Voice instead.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the fork bundle layers linked from the build (`@deepseek-ai/dsh-event-bundle` as the service skeleton, then one bundle per feature; `fork/bundles/event/README.md` has the mount order); the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").

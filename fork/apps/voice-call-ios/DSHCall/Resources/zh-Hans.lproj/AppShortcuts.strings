@@ -1,0 +1,4 @@
+/* App Shortcut phrases. ${applicationName} matches the app name and its alternative name "DSH". */
+"Call ${applicationName}" = "打给${applicationName}";
+"Call DSH with ${applicationName}" = "用${applicationName}打给 DSH";
+"Start a ${applicationName} call" = "发起${applicationName}通话";

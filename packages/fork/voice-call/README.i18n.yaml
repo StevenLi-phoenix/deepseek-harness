@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/voice-call/README.md
+/:
+  en: 05d1e253e294eaa1
+  zh: d5a28852fbbf6c0f
+/deepseek-ai-dsh-voice-call:
+  en: b167bb1f3ea940b5
+  zh: 642c1ca1ae8c5d69
+/deepseek-ai-dsh-voice-call/summary:
+  en: d349a9545885de5c
+  zh: 50622c7524e2d2c8
+/deepseek-ai-dsh-voice-call/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-voice-call/use-this-package:
+  en: 468bbe4c686152a1
+  zh: 839ef12e30a39a74
+/deepseek-ai-dsh-voice-call/use-this-package/when-to-choose-it:
+  en: d675cec480bfd5be
+  zh: 86e55ccb6d0ec30b
+/deepseek-ai-dsh-voice-call/use-this-package/minimal-configuration:
+  en: c4f7b9639f24a85e
+  zh: 761a6b1d1ef8a57a
+/deepseek-ai-dsh-voice-call/understand-the-implementation:
+  en: 5b1456a62327d3c8
+  zh: 19fa7c3982862475
+/deepseek-ai-dsh-voice-call/further-exploration:
+  en: f22676256a4c4c80
+  zh: 3e54bba21dda9b86
+/deepseek-ai-dsh-voice-call/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-voice-call/model-experience/call-session:
+  en: dbccbdb2ab6e128a
+  zh: 32550ead20dec60e
+/deepseek-ai-dsh-voice-call/model-experience/call-session/what-the-model-sees:
+  en: d03ae82e84560885
+  zh: 371240560606bc36
+/deepseek-ai-dsh-voice-call/model-experience/call-session/token-effect:
+  en: 5bd4fc42ddea165d
+  zh: a3436b8933a9d547
+/deepseek-ai-dsh-voice-call/model-experience/call-session/kv-cache-effect:
+  en: f342c87a720104c3
+  zh: 7e62898d0661ee5d
+/deepseek-ai-dsh-voice-call/model-experience/hand-off-to-the-main-agent:
+  en: 42225388329b62c1
+  zh: fca98f37ccde1667
+/deepseek-ai-dsh-voice-call/model-experience/hand-off-to-the-main-agent/what-the-model-sees:
+  en: f2645dcaa121c93e
+  zh: 68ff2fe991ab05a9
+/deepseek-ai-dsh-voice-call/model-experience/hand-off-to-the-main-agent/token-effect:
+  en: a11e4f11730da588
+  zh: eb0975f5ac151da5
+/deepseek-ai-dsh-voice-call/model-experience/hand-off-to-the-main-agent/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: e0cf64f4d830f1ec
+/deepseek-ai-dsh-voice-call/known-limitations-and-deferred-work:
+  en: 3f96ccf6faf6e948
+  zh: 9a382bcb505ca176
+/deepseek-ai-dsh-voice-call/known-limitations-and-deferred-work/dev-note:
+  en: f4d0638f46bb67df
+  zh: c803225c342949ff

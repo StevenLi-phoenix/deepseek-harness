@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/voice-call",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's voice line: the DSH Call service, its `voice-call` preset, and the call Sessions' answers spoken over the line.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/apps/voice-call-ios/README.md
+/dsh-call-for-ios:
+  en: 581239c967e24f8b
+  zh: d5adfffda1a9e25b
+/dsh-call-for-ios/requirements:
+  en: 285c3dabab5ca9f5
+  zh: dbd64adde11e3103
+/dsh-call-for-ios/set-up:
+  en: bae2b8ae842ca43e
+  zh: 2d7d5609a9ed3cc3
+/dsh-call-for-ios/set-up/1-pick-a-bundle-identifier-and-get-an-apns-key:
+  en: 84433721ee29f783
+  zh: e12ab47756467f2a
+/dsh-call-for-ios/set-up/2-configure-the-server:
+  en: 917fced640dd003c
+  zh: c2f1573ab50ab571
+/dsh-call-for-ios/set-up/3-set-your-signing-values:
+  en: 90631ff994082242
+  zh: c513c7d591f89dc5
+/dsh-call-for-ios/set-up/4-generate-the-project-and-run-it:
+  en: dc6f309038d06b12
+  zh: c35e6edfe28d15da
+/dsh-call-for-ios/set-up/5-connect-the-app-to-the-server:
+  en: f0be6c8f508c6ade
+  zh: b308c8c5a12f9e4a
+/dsh-call-for-ios/set-up/6-call-dsh:
+  en: b96e347b5452bf71
+  zh: 08d5c4964802d2a2
+/dsh-call-for-ios/set-up/7-let-dsh-call-you:
+  en: b2d2a16610562a17
+  zh: b543c7afa322b126
+/dsh-call-for-ios/how-a-call-works:
+  en: 7c83826e76ce9ba7
+  zh: ef67288910dc151b
+/dsh-call-for-ios/how-a-call-works/incoming-calls:
+  en: dce912964d516e1f
+  zh: 49a8c8069d498258
+/dsh-call-for-ios/how-a-call-works/outgoing-calls:
+  en: 998f6fbd43a5b8eb
+  zh: 4741c79acdf2a5a7
+/dsh-call-for-ios/how-a-call-works/media:
+  en: 5bd445b9dc6a4aac
+  zh: bb39b3f4cb2facdf
+/dsh-call-for-ios/how-a-call-works/the-control-channel:
+  en: 4de37e80e50bf92c
+  zh: d69fa9a511f23282
+/dsh-call-for-ios/how-a-call-works/speech-on-the-device:
+  en: 3eac5f44ac1aa77c
+  zh: adcd5ebb24a6ee3f
+/dsh-call-for-ios/how-a-call-works/privacy-and-logs:
+  en: 398d6a9e771d6c2f
+  zh: dcfa9ce2a9004e48
+/dsh-call-for-ios/project-reference:
+  en: ab77a3cf0669d1b6
+  zh: bec9d3ca6e26285e
+/dsh-call-for-ios/release-builds-and-testflight:
+  en: 8fecf61941358572
+  zh: 5c82f2cbe93115a8
+/dsh-call-for-ios/known-limitations:
+  en: 0e6884873e139d68
+  zh: 60607797bc4b6494

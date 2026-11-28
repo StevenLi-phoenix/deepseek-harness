@@ -64,7 +64,7 @@ function link(name, directory) {
 for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-event-bus', '@deepseek-ai/dsh-github-sensor',
   '@deepseek-ai/dsh-wechat', '@deepseek-ai/dsh-tool-watch', '@deepseek-ai/dsh-tool-wechat', '@deepseek-ai/dsh-tool-push', '@deepseek-ai/dsh-notify-learning', '@deepseek-ai/dsh-provider-balance', '@deepseek-ai/dsh-owner-memory', '@deepseek-ai/dsh-owner-memory-admin',
   '@deepseek-ai/dsh-event-ingest', '@deepseek-ai/dsh-tool-monitor', '@deepseek-ai/dsh-cc-bridge', '@deepseek-ai/dsh-sysmon', '@deepseek-ai/dsh-plugin-config', '@deepseek-ai/dsh-event-console', '@deepseek-ai/dsh-cc-admin', '@deepseek-ai/dsh-presence', '@deepseek-ai/dsh-wechat-settings', '@deepseek-ai/dsh-bili',
-  '@deepseek-ai/dsh-voice', '@deepseek-ai/dsh-tool-voice', '@deepseek-ai/dsh-tool-up',
+  '@deepseek-ai/dsh-voice', '@deepseek-ai/dsh-tool-voice', '@deepseek-ai/dsh-voice-call', '@deepseek-ai/dsh-tool-voice-call', '@deepseek-ai/dsh-tool-up',
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-qq', '@deepseek-ai/dsh-qq-login', '@deepseek-ai/dsh-tool-qq', '@deepseek-ai/dsh-qqbot',
   '@deepseek-ai/dsh-turn-taint', '@deepseek-ai/dsh-integrity-watch', '@deepseek-ai/dsh-speaking-style', '@deepseek-ai/dsh-speaking-style-settings', '@deepseek-ai/dsh-content-guard', '@deepseek-ai/dsh-time-gap',
   '@deepseek-ai/dsh-courses', '@deepseek-ai/dsh-courses-settings', '@deepseek-ai/dsh-tool-courses',

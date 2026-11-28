@@ -489,7 +489,8 @@
                 this conversation. Send the owner a file or picture with wechat_send_file, and say
                 something out loud with speak (the audio arrives as an mp3 file). Push to the owner's
                 phone with owner_push only what is lost if the owner does not act within hours; a
-                deadline a day or more away goes in your WeChat answer.
+                deadline a day or more away goes in your WeChat answer. When it cannot wait or needs
+                a quick back-and-forth, phone the owner with call_owner, if you have it.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -535,6 +536,10 @@
           # speak: text to speech, sent to the owner on WeChat as an audio file.
           - id: tool-voice
             name: '@deepseek-ai/dsh-tool-voice'
+          # call_owner: phone the owner through the DSH Call app; present only while the voice-call layer's
+          # service runs (fork/bundles/voice-call). The tool returns after the call, with its transcript.
+          - id: tool-voice-call
+            name: '@deepseek-ai/dsh-tool-voice-call'
           # Who started this turn decides what it may do: cc_send and cc_start only in a turn the owner started
           # alone; reminders and watches made in any other turn are marked and reported. Observing only
           # until the owner decides (2026-10-31): `enforce: false` logs what it would refuse. Turning it on

@@ -28,6 +28,7 @@ flowchart LR
   pkg_notify_learning["notify-learning"]
   pkg_tool_voice["tool-voice"]
   pkg_tool_wechat["tool-wechat"]
+  pkg_voice_call["voice-call"]
   pkg_owner_relay["owner-relay"]
   svc_ownerRelay["ctx.ownerRelay<br/>Relay of final answers to the owner"]
   pkg_bili["bili"]
@@ -46,6 +47,8 @@ flowchart LR
   pkg_qq_login["qq-login"]
   pkg_speaking_style["speaking-style"]
   svc_qqBot["ctx.qqBot<br/>Official QQ bot channel"]
+  svc_voiceCall["ctx.voiceCall<br/>Voice line to the owner's phone"]
+  pkg_tool_voice_call["tool-voice-call"]
   svc_speakingStyle["ctx.speakingStyle<br/>Speaking style"]
   pkg_speaking_style_settings["speaking-style-settings"]
   svc_notifyLearning["ctx.notifyLearning<br/>Notification rules learned from the owner"]
@@ -576,6 +579,7 @@ flowchart LR
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
   pkg_voice --> svc_voice
+  pkg_voice_call --> svc_voiceCall
   pkg_web --> svc_web
   pkg_web_app --> svc_webApp
   pkg_web_deepseek_api --> svc_web
@@ -688,11 +692,13 @@ flowchart LR
   svc_ownerNotifier --> pkg_tool_voice
   svc_ownerNotifier --> pkg_tool_watch
   svc_ownerNotifier --> pkg_tool_wechat
+  svc_ownerNotifier --> pkg_voice_call
   svc_ownerRelay --> pkg_bili
   svc_ownerRelay --> pkg_event_bus
   svc_ownerRelay --> pkg_notify_learning
   svc_ownerRelay --> pkg_qqbot
   svc_ownerRelay --> pkg_time_gap
+  svc_ownerRelay --> pkg_voice_call
   svc_ownerRelay --> pkg_wechat
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginMarket --> pkg_client_ui_plugin_market
@@ -701,6 +707,7 @@ flowchart LR
   svc_pluginRegistryProbe --> pkg_client_ui_plugin_manager
   svc_presence --> pkg_courses
   svc_presence --> pkg_event_console
+  svc_presence --> pkg_voice_call
   svc_presence --> pkg_wechat
   svc_profileContext --> pkg_plugin_manager
   svc_ptcRuntime --> pkg_tool_executor_ptc
@@ -794,7 +801,9 @@ flowchart LR
   svc_userQuestions --> pkg_tool_ask_user
   svc_voice --> pkg_event_console
   svc_voice --> pkg_tool_voice
+  svc_voice --> pkg_voice_call
   svc_voice --> pkg_wechat
+  svc_voiceCall --> pkg_tool_voice_call
   svc_web --> pkg_tool_web
   svc_webApp --> pkg_harness_dev_context
   svc_webServer --> pkg_client_connection
@@ -826,18 +835,19 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.remoteConnection` | `service` | [`client-remote-connection`](../packages/client/remote-connection) | - | - | - | Owns QR invitations, approved pairing requests, Remote browser credentials and the anonymous login document; its Client provides approval controls and an independent Token-link shortcut. |
 | `ctx.eventBus` | `service` | [`event-bus`](../packages/fork/event-bus) | - | [`event-ingest`](../packages/fork/event-ingest), [`github-sensor`](../packages/fork/github-sensor), [`qq`](../packages/fork/qq), [`qqbot`](../packages/fork/qqbot), [`tool-monitor`](../packages/fork/tool-monitor), [`tool-up`](../packages/fork/tool-up), [`tool-watch`](../packages/fork/tool-watch), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | Owns dedupe, routes, batches, and the notification flow; sensors publish events and tools change routes. |
-| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`notify-learning`](../packages/fork/notify-learning), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | The event bus defines the channel interface; the WeChat channel provides it. |
-| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap), [`notify-learning`](../packages/fork/notify-learning) | - | Channels register here and claim Sessions; the relay sends each final answer through its Session's channel. |
-| `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console) | - | Combines the Sleep Focus, a daily window, and manual buttons into one state. |
+| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`notify-learning`](../packages/fork/notify-learning), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat), [`voice-call`](../packages/fork/voice-call) | - | The event bus defines the channel interface; the WeChat channel provides it. |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap), [`notify-learning`](../packages/fork/notify-learning), [`voice-call`](../packages/fork/voice-call) | - | Channels register here and claim Sessions; the relay sends each final answer through its Session's channel. |
+| `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console), [`voice-call`](../packages/fork/voice-call) | - | Combines the Sleep Focus, a daily window, and manual buttons into one state. |
 | `ctx.githubSensor` | `service` | [`github-sensor`](../packages/fork/github-sensor) | - | [`tool-watch`](../packages/fork/tool-watch), [`event-console`](../packages/fork/event-console) | - | Polls and receives GitHub deliveries and publishes them to the event bus. |
 | `ctx.courses` | `service` | [`courses`](../packages/fork/courses) | - | [`tool-courses`](../packages/fork/tool-courses), [`courses-settings`](../packages/fork/courses-settings) | - | Reads the course service and sends deadline reminders. |
 | `ctx.gmail` | `service` | [`gmail`](../packages/fork/gmail) | - | [`tool-gmail`](../packages/fork/tool-gmail), [`gmail-settings`](../packages/fork/gmail-settings) | - | Reads and sends the owner's Gmail; holds a send for the owner's confirmation. |
 | `ctx.qq` | `service` | [`qq`](../packages/fork/qq) | - | [`tool-qq`](../packages/fork/tool-qq), [`qq-login`](../packages/fork/qq-login), [`speaking-style`](../packages/fork/speaking-style), [`event-console`](../packages/fork/event-console) | - | Client of the qq-recorder service; writes group digests and answers searches. |
 | `ctx.qqBot` | `service` | [`qqbot`](../packages/fork/qqbot) | - | - | - | Holds the official-bot connection; no other package calls it. |
+| `ctx.voiceCall` | `service` | [`voice-call`](../packages/fork/voice-call) | - | [`tool-voice-call`](../packages/fork/tool-voice-call) | - | Rings the DSH Call app by VoIP push and talks with the owner over WebRTC through a call Session. |
 | `ctx.speakingStyle` | `service` | [`speaking-style`](../packages/fork/speaking-style) | - | [`speaking-style-settings`](../packages/fork/speaking-style-settings), [`event-console`](../packages/fork/event-console) | - | Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it. |
 | `ctx.notifyLearning` | `service` | [`notify-learning`](../packages/fork/notify-learning) | - | - | - | Keeps proactive messages with the owner's replies, learns rules nightly, and serves the rules block and its tools row. |
 | `ctx.contentGuard` | `service` | [`content-guard`](../packages/fork/content-guard) | - | [`qq`](../packages/fork/qq), [`speaking-style`](../packages/fork/speaking-style), [`tool-up`](../packages/fork/tool-up) | - | Checks text others can read through patterns, canaries, memory overlap, and a model, and refuses on failure. |
-| `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | Calls the speech and transcription services and returns files or text. |
+| `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console), [`voice-call`](../packages/fork/voice-call) | - | Calls the speech and transcription services and returns files or text. |
 | `ctx.claudeCodeSessions` | `service` | [`cc-admin`](../packages/fork/cc-admin) | - | [`event-console`](../packages/fork/event-console) | - | Lists and starts Claude Code sessions of the service account for the Settings page. |
 | `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`speaking-style`](../packages/fork/speaking-style) | - | Thin client of bili-svc, which holds the session and writes to Bilibili. |
 | `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`speaking-style`](../packages/fork/speaking-style) | - | Reads trending videos through bili-svc. |

@@ -59,6 +59,8 @@ kind: "package-group"
 | [`tool-monitor/`](tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`tool-up/`](tool-up/README.zh.md) | `up_*` 工具：agent 读取创作者号的评论、私信和稿件，并向 bili-svc 回复闸门申请回复；答案只有 `sent`、`held`、`blocked` |
 | [`tool-voice/`](tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |
+| [`voice-call/`](voice-call/README.zh.md) | 打到 owner 手机的语音线路，默认禁用：VoIP 推送经 CallKit 让 DSH Call iOS app 响铃，经 Tailscale 的全双工 WebRTC 通话和一个通话 Session 对话，可以打断（`ctx.voiceCall`） |
+| [`tool-voice-call/`](tool-voice-call/README.zh.md) | `call_owner` 工具：agent 给 owner 打电话，等通话结束，拿到结果和转写 |
 | [`cc-bridge/`](cc-bridge/README.zh.md) | `cc_list_sessions`、`cc_send`、`cc_start`、`cc_stop` 工具：与 agent 自己账号下的 Claude Code 会话协作 |
 | [`tool-qq/`](tool-qq/README.zh.md) | `qq_groups`、`qq_digest`、`qq_recent`、`qq_search` 工具：agent 读取 QQ 观察者记录和摘要的内容 |
 | [`tool-watch/`](tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控；`flow_read`、`flow_edit`：它自己改整条通知流程 |

@@ -323,10 +323,12 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
 | `@deepseek-ai/dsh-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel |
+| `@deepseek-ai/dsh-tool-voice-call` | yes | call_owner: the agent rings the owner's phone through the DSH Call app and gets back how the call went and what was said |
 | `@deepseek-ai/dsh-tool-watch` | yes | Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the fork event bus and GitHub sensor |
 | `@deepseek-ai/dsh-tool-wechat` | yes | Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking |
 | `@deepseek-ai/dsh-turn-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
+| `@deepseek-ai/dsh-voice-call` | yes | Voice line between the owner's phone and the agent: VoIP pushes ring the DSH Call iOS app through CallKit, and a full-duplex WebRTC call talks to a call Session over Tailscale |
 | `@deepseek-ai/dsh-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.ownerNotifier for the fork event bus |
 | `@deepseek-ai/dsh-wechat-settings` | no | WeChat and quiet-hours (勿扰) settings sections: bind the owner's WeChat bot by QR code, see the channel's health, unbind, and control when the owner counts as asleep (browser half; the Host routes are served by @deepseek-ai/dsh-wechat and @deepseek-ai/dsh-presence) |
 
