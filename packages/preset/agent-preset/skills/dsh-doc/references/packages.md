@@ -302,7 +302,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-notify-learning` | yes | Notification rules learned from the owner's reactions to the agent's proactive messages: captured from the chat Session log, learned nightly only when the owner's own words agree in two exchanges, shown to the main agent as data, and listed or deleted with notify_rules and notify_rules_forget |
 | `@deepseek-ai/dsh-owner-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
 | `@deepseek-ai/dsh-owner-memory-admin` | no | Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-owner-memory/settings) |
-| `@deepseek-ai/dsh-owner-relay` | no | One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.ownerNotifier |
+| `@deepseek-ai/dsh-owner-relay` | yes | One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.ownerNotifier |
 | `@deepseek-ai/dsh-plugin-config` | no | All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section |
 | `@deepseek-ai/dsh-presence` | yes | Owner presence for the event service: asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides; channels hold back non-urgent messages while the owner sleeps (the Settings page is @deepseek-ai/dsh-wechat-settings) |
 | `@deepseek-ai/dsh-provider-balance` | yes | Account settings card with the balance or quota of every provider key the Host holds |
@@ -317,13 +317,14 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-tool-bili` | no | Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, like, coin, follow, and save through bili-svc, and keep a journal; no speech |
 | `@deepseek-ai/dsh-tool-courses` | no | Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records |
 | `@deepseek-ai/dsh-tool-gmail` | yes | Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send (behind the send gate), and gmail_modify |
+| `@deepseek-ai/dsh-tool-job-apply` | yes | Narrow job tracker, issue, repository and log tools for the job-apply preset |
 | `@deepseek-ai/dsh-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-tool-push` | yes | Model-facing owner_push: an urgent message to the owner's phone, or a line in the daily email digest, through the API platform's message bus |
 | `@deepseek-ai/dsh-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
 | `@deepseek-ai/dsh-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel |
 | `@deepseek-ai/dsh-tool-watch` | yes | Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the fork event bus and GitHub sensor |
-| `@deepseek-ai/dsh-tool-wechat` | no | Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking |
+| `@deepseek-ai/dsh-tool-wechat` | yes | Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking |
 | `@deepseek-ai/dsh-turn-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
 | `@deepseek-ai/dsh-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.ownerNotifier for the fork event bus |

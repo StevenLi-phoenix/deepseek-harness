@@ -376,3 +376,16 @@ export class IssueItems {
     return `created ${number}`
   }
 }
+
+/**
+ * Strict-schema providers (Codex, the deployment's default route) send every declared property and fill the unused
+ * ones with '', [], 0 or false. Treat those fillers as absent, so each operation reads only the fields it uses and
+ * never fails because a field it does not use was sent (2026-11-27: the first job-lead run looped on read_runbook).
+ * @param args - model-supplied arguments.
+ * @param keepFalse - keep `false` booleans (an append states them; an update would overwrite a stored true).
+ * @returns the arguments without filler values.
+ */
+export function present<T extends Record<string, unknown>>(args: T, keepFalse = true): Partial<T> {
+  return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined && value !== null && value !== ''
+    && value !== 0 && !(Array.isArray(value) && value.length === 0) && (keepFalse || value !== false))) as Partial<T>
+}

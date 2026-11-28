@@ -362,12 +362,9 @@ async function linkHosts(page: Page): Promise<string[]> {
   try {
     const hosts = new Set<string>()
     for (const href of await Promise.race([read, late])) {
-      try {
-        const url = new URL(href)
-        if (url.protocol === 'https:' || url.protocol === 'http:') hosts.add(url.hostname)
-      } catch {
-        // A page's malformed href names no host.
-      }
+      // A page's malformed href parses to null and names no host.
+      const url = URL.parse(href)
+      if (url !== null && (url.protocol === 'https:' || url.protocol === 'http:')) hosts.add(url.hostname)
     }
     return [...hosts]
   } finally {

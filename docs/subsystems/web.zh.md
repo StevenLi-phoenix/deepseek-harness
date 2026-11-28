@@ -88,6 +88,8 @@ interface WebSearchSource {
  */
 interface WebFetchRequest {
   readonly url: string
+  /** Require a provider that explicitly enforces public-only connections on every hop. */
+  readonly publicOnly?: boolean
 }
 ```
 

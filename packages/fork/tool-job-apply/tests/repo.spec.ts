@@ -9,7 +9,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import * as JobTools from '../src/index.ts'
+import { present } from '../src/operations.ts'
 import { JobRepository, validateText } from '../src/repo.ts'
 import type { CommandRunner } from '../src/repo.ts'
 
@@ -268,10 +268,10 @@ describe('JobRepository targeted edits', () => {
 
 describe('present', () => {
   it('drops the fillers a strict-schema provider sends for unused fields', () => {
-    expect(JobTools.present({ operation: 'list', status: 'queued', id: '', step: 0, paths: [], visa_flag: false, note: null }))
+    expect(present({ operation: 'list', status: 'queued', id: '', step: 0, paths: [], visa_flag: false, note: null }))
       .toEqual({ operation: 'list', status: 'queued', visa_flag: false })
     // An update leaves stored flags alone unless the call sets one.
-    expect(JobTools.present({ visa_flag: false, requires_cover_letter: true }, false)).toEqual({ requires_cover_letter: true })
+    expect(present({ visa_flag: false, requires_cover_letter: true }, false)).toEqual({ requires_cover_letter: true })
   })
 })
 
