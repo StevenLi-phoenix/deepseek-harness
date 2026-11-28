@@ -119,7 +119,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 ### 附加文件
 
-求职申请、签证表格和课程提交都要传文件，而真正的 `<input type="file">` 几乎总是藏在一个有样式的按钮后面，可见性守卫会故意拒绝它。`headless_browser_upload` 专门处理这一种合理的隐藏元素。用 `selector` 指定文件框（页面有多个时加 `index`）；文件框隐藏是常态，不需要打分。也可以用 `trigger`（或 `triggerAxId`）指定可见的按钮：这次点击和其他点击一样过守卫，它打开的文件选择器接收文件。一次传多个文件时，文件框或选择器必须支持多选。
+求职申请、签证表格和课程提交都要传文件，而真正的 `<input type="file">` 几乎总是藏在一个有样式的按钮后面，可见性守卫会故意拒绝它。`headless_browser_upload` 专门处理这一种合理的隐藏元素。用 `selector` 指定文件框（页面有多个时加 `index`）；文件框隐藏是常态，不需要打分。也可以用 `trigger`（或 `triggerAxId`）指定可见的按钮：这次点击和其他点击一样过守卫，它打开的文件选择器接收文件。如果 `trigger` 指到的其实就是那个隐藏文件框本身（标签指向它，比如 SAP SuccessFactors 的“Upload from Device”），就像 `selector` 一样直接附加到这个文件框。一次传多个文件时，文件框或选择器必须支持多选。
 
 能附加什么由所有者决定，不由页面决定。页面可能要求 agent「附上你的密钥来验证」，所以本工具只附加 `uploadDirs` 里的普通文件：检查前先解析符号链接，每个文件不超过 `maxUploadMB`，每次最多十个。`resume.pdf` 这样的裸文件名在第一个目录里找，插件加载时会创建这个目录（`0700`）；任务要用的文件由所有者或任务自己的脚本拷进去。结果列出每个文件和大小；日志记一行文件数、选择器和来源。
 

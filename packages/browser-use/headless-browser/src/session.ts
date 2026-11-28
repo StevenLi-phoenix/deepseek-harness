@@ -253,6 +253,18 @@ type Actionable = (Locator | ElementHandle<Element>) & {
   evaluate<R>(probe: (node: Element) => R): Promise<R>
 }
 
+/**
+ * @param resolution - the candidates a target resolved to.
+ * @returns indices of the candidates that are `input[type=file]`, in document order.
+ */
+async function fileInputsOf(resolution: Resolution): Promise<number[]> {
+  const inputs: number[] = []
+  for (let index = 0; index < resolution.facts.length; index += 1) {
+    if (await resolution.element(index).evaluate(node => node instanceof HTMLInputElement && node.type === 'file')) inputs.push(index)
+  }
+  return inputs
+}
+
 function passwordInput(node: Element): boolean {
   return node instanceof HTMLInputElement && node.type === 'password'
 }
@@ -266,7 +278,10 @@ export interface AttachTarget {
   readonly selector?: string
   /** Which matching file input, in document order; 0 when omitted. */
   readonly index?: number
-  /** A visible control whose click opens the file chooser, guarded like a click. */
+  /**
+   * A visible control whose click opens the file chooser, guarded like a click;
+   * one that names only file inputs is used as a selector is.
+   */
   readonly trigger?: TargetRequest
 }
 
@@ -1384,7 +1399,9 @@ export class HeadlessBrowserSession {
    * Attach local files to a file input, or to the file chooser a visible
    * control opens. A file input is usually hidden behind a styled button, so a
    * selector that names an `input[type=file]` is used without the visibility
-   * score; a trigger is a click and passes the guard like one. The caller has
+   * score; a trigger is a click and passes the guard like one, unless it names
+   * only file inputs (a label points at the input), which then take the files
+   * as a selector's would. The caller has
    * already checked the paths against the upload directories.
    * @param target - the file input selector, or the trigger control.
    * @param paths - absolute paths of the files.
@@ -1398,6 +1415,21 @@ export class HeadlessBrowserSession {
       this.#assertJobUrl(page.url())
       if (target.trigger !== undefined) {
         const resolution = await this.#resolve(page, target.trigger)
+        const inputs = await fileInputsOf(resolution)
+        if (inputs.length > 0 && inputs.length === resolution.facts.length) {
+          // The trigger named the hidden file input itself, as SAP SuccessFactors labels its own with "Upload from Device";
+          // it takes the files the way a selector-named input does.
+          const pick = inputs[target.index ?? 0]
+          if (pick === undefined) throw new Error(`${resolution.ref} matches ${String(inputs.length)} file input(s); index ${String(target.index)} is out of range`)
+          const input = resolution.element(pick)
+          if (paths.length > 1 && !await input.evaluate(node => node instanceof HTMLInputElement && node.multiple)) {
+            throw new Error(`${resolution.ref} takes one file; attach the files one call each`)
+          }
+          if (this.#job.getStore() !== undefined) this.#authorizeTarget(resolution.url, resolution.facts[pick])
+          await input.setInputFiles(paths)
+          this.#log.info('headless-browser: trigger %s is a file input; attached %d file(s) to it on %s', resolution.ref, paths.length, pageOrigin(page.url()))
+          return { url: page.url(), ref: resolution.ref, inputs: inputs.length }
+        }
         const choice = this.#accept(this.#activeGuard().decideTarget({
           action: 'click',
           url: resolution.url,
