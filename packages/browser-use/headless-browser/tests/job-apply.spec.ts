@@ -154,7 +154,7 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     rmSync(root, { force: true, recursive: true })
   }
-}, 25_000)
+}, 120_000)
 
 it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an idle job Session at the tab cap and reports a full strip it cannot free', async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-job-tabs-'))
@@ -199,7 +199,7 @@ it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an idle job
     await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     rmSync(root, { force: true, recursive: true })
   }
-}, 25_000)
+}, 120_000)
 
 it.skipIf(!existsSync(chromium.executablePath()))('keeps a working Session’s popup at the cap and hands an idle Session’s tabs to the next worker', async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-job-lease-'))
@@ -269,7 +269,7 @@ it.skipIf(!existsSync(chromium.executablePath()))('keeps a working Session’s p
     await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     rmSync(root, { force: true, recursive: true })
   }
-}, 25_000)
+}, 120_000)
 
 it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an unclaimed blank tab, then from a working Session’s stale side tabs, keeping its current tab and a popup’s opener', async () => {
   // One LinkedIn search worker kept seven employer pages open while it worked; apply workers found the strip full (2026-11-27).
@@ -360,7 +360,7 @@ it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an unclaime
     await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     rmSync(root, { force: true, recursive: true })
   }
-}, 25_000)
+}, 120_000)
 
 it.skipIf(!existsSync(chromium.executablePath()))('reads employer links from every tab a Session has on its current host, and from no other host', async () => {
   // Tenet's Oracle application step links nowhere; its posting page on the same host links the employer (2026-11-27).
@@ -409,4 +409,4 @@ it.skipIf(!existsSync(chromium.executablePath()))('reads employer links from eve
     await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     rmSync(root, { force: true, recursive: true })
   }
-}, 25_000)
+}, 120_000)

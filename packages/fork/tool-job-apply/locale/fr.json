@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outils de candidature",
+    "description": "Permet aux presets d'emploi de modifier le clone de travail, d'écrire le journal, de mettre à jour les lignes du suivi et d'ouvrir des tickets de flux par des opérations fixes plutôt qu'un shell."
+  }
+}

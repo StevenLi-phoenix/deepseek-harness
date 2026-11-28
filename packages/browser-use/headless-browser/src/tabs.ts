@@ -331,7 +331,11 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     })
   }
 
-  /** @param id - live tab id. @returns the trusted owner recorded for this tab. */
+  /**
+   * Look up which Session opened or was handed a tab.
+   * @param id - live tab id.
+   * @returns the owning Session id, null for a tab no Session owns, or undefined when no live tab has that id.
+   */
   owner(id: string): string | null | undefined {
     const tab = this.#tabs.get(id)
     return tab === undefined || tab.page.isClosed() ? undefined : tab.openedBySessionId

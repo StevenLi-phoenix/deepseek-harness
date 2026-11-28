@@ -22,7 +22,12 @@ async function checked(path: string, writable: boolean) {
   }
 }
 
-/** @param path - trusted existing runbook path. @returns the bounded UTF-8 runbook. */
+/**
+ * Read the batch runbook after confirming it is a canonical, single-link regular file within the 128 KiB limit.
+ * @param path - trusted existing runbook path.
+ * @returns the runbook text decoded as strict UTF-8.
+ * @throws Error - when the file is not canonical or too large, or does not decode as UTF-8.
+ */
 export async function readBatchRunbook(path: string): Promise<string> {
   const handle = await checked(path, false)
   try {
@@ -33,7 +38,13 @@ export async function readBatchRunbook(path: string): Promise<string> {
   } finally { await handle.close() }
 }
 
-/** @param path - trusted existing runbook path. @param text - replacement bounded Markdown. @returns status text. */
+/**
+ * Replace the whole content of the batch runbook in place, after confirming it is a canonical regular file.
+ * @param path - trusted existing runbook path.
+ * @param text - replacement Markdown: non-empty, at most 128 KiB, without control characters other than tab and line breaks.
+ * @returns a status message for the model.
+ * @throws Error - when the text is out of bounds or the file is not canonical.
+ */
 export async function writeBatchRunbook(path: string, text: string): Promise<string> {
   const bytes = Buffer.from(text, 'utf8')
   if (bytes.length === 0 || bytes.length > limit || /[^\P{Cc}\t\r\n]/u.test(text)) throw new Error('Supply bounded plain Markdown for the batch runbook.')

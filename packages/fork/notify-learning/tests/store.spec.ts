@@ -99,7 +99,7 @@ describe('LearningStore', () => {
     expect(result.state.revision).toBe(1)
     expect(await s.state()).toMatchObject({ revision: 1, rules: [rule] })
     expect(await s.exchanges()).toEqual([])
-    expect((await readFile(join(s.dir, 'history.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown)).toEqual([history])
+    expect((await readFile(join(s.dir, 'history.jsonl'), 'utf8')).trim().split('\n').map((line): unknown => JSON.parse(line))).toEqual([history])
     expect(await mode(join(s.dir, 'history.jsonl'))).toBe(0o600)
     expect(await mode(join(s.dir, 'rules.json'))).toBe(0o600)
 

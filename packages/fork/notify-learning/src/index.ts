@@ -34,7 +34,7 @@ export type { LearningSettings, PassReport, RulesBlock } from './service.ts'
 export type { ExchangeLimits } from './store.ts'
 export { LearningFileError } from './store.ts'
 export { SignalsAnswerError } from './learn.ts'
-export { NotifyLearning } from './service.ts'
+export type { NotifyLearning } from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

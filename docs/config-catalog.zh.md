@@ -2421,7 +2421,7 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ## `@deepseek-ai/dsh-gmail`
 
 - `inject`: `storageDomain` · `credentials`
-- `source`: [`packages/fork/gmail/src/index.ts:75`](../packages/fork/gmail/src/index.ts)
+- `source`: [`packages/fork/gmail/src/index.ts:77`](../packages/fork/gmail/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2505,7 +2505,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-headless-browser`
 
 - `inject`: `tools`
-- `source`: [`packages/browser-use/headless-browser/src/config.ts:14`](../packages/browser-use/headless-browser/src/config.ts)
+- `source`: [`packages/browser-use/headless-browser/src/config.ts:27`](../packages/browser-use/headless-browser/src/config.ts)
 
 ```ts config-catalog
 /** Persistent profile, viewport, live-view, and screenshot settings. */
@@ -2590,6 +2590,8 @@ export interface Config {
   uploadDirs: string[]
   /** Largest file `headless_browser_upload` attaches, in megabytes. @default 25 */
   maxUploadMB: number
+  /** Mount only the isolated, scoped job-application browser when specified. */
+  jobApply?: JobApplyConfig
 }
 
 /** Every configured matcher must pass; hosts and origins within one matcher are alternatives. */
@@ -2608,6 +2610,14 @@ export interface KeepaliveExpectation extends Record<string, unknown> {
   readonly forbidText?: string
   /** Milliseconds to wait after load for required text; when omitted, check once. */
   readonly waitForTextMs?: number
+}
+
+/** Trusted deployment configuration for the scoped application browser. */
+export interface JobApplyConfig {
+  /** Exact employer-facing PDF names mapped to trusted paths relative to the job clone. */
+  uploadFiles: Record<string, string>
+  /** Canonical job clone containing private PDFs and cover_letters/. */
+  coverLetterRoot: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-headless-browser -->
@@ -3800,6 +3810,22 @@ export interface Config {
 export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-owner-memory -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-owner-relay -->
+<a id="deepseek-aidsh-owner-relay"></a>
+
+## `@deepseek-ai/dsh-owner-relay`
+
+- `source`: [`packages/fork/owner-relay/src/index.ts:20`](../packages/fork/owner-relay/src/index.ts)
+
+```ts config-catalog
+/** Host configuration of the dedicated job-lead route. */
+export interface Config {
+  /** ID of the persistent root Session on the job-lead preset; omitted disables routing. */
+  jobLeadSessionId?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-owner-relay -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-permission-presets -->
 <a id="deepseek-aidsh-permission-presets"></a>
@@ -6158,13 +6184,15 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-gmail`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/tool-gmail/src/index.ts:22`](../packages/fork/tool-gmail/src/index.ts)
+- `source`: [`packages/fork/tool-gmail/src/index.ts:23`](../packages/fork/tool-gmail/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
 export interface Config {
   /** IANA zone dates are shown in. */
   timeZone: string
+  /** Owner tools, live-tab verification only, or mail triage reads only. */
+  mode?: 'full' | 'verification-only' | 'inbox-only'
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-gmail -->
@@ -6185,6 +6213,26 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-goal -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-job-apply -->
+<a id="deepseek-aidsh-tool-job-apply"></a>
+
+## `@deepseek-ai/dsh-tool-job-apply`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/tool-job-apply/src/index.ts:17`](../packages/fork/tool-job-apply/src/index.ts)
+
+```ts config-catalog
+interface Config {
+  /** Absolute path of the deployment-owned job clone that every repository, log, and issue operation reads and writes. */
+  root: string
+  /** Tool roster of the preset that mounts this row: `apply` fills applications, `inbox` triages replies, `lead` runs a batch. */
+  mode?: 'apply' | 'inbox' | 'lead'
+  /** Trusted path of the existing batch runbook `lead` hands to its workers; ignored by the other modes. */
+  batchRunbook?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-job-apply -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-jobs -->
 <a id="deepseek-aidsh-tool-jobs"></a>
@@ -6545,6 +6593,8 @@ export interface PresetSelectionConfig {
 export interface Config {
   /** Register `interrupt_agent`. Defaults to true; false leaves the service API available. */
   interrupt?: boolean
+  /** Register `wait_agent`. Defaults to true. */
+  wait?: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-subagent-control -->
@@ -6699,6 +6749,8 @@ export interface Config {
   search?: boolean
   /** Register `web_fetch`. Defaults to true. */
   fetch?: boolean
+  /** Require public-only fetch transport. Defaults to false. */
+  publicOnly?: boolean
   /** Upper bound on sources returned by one `web_search` call. Defaults to 10. */
   searchMaxResults?: number
   /** Upper bound on queries accepted by one `web_search` call. Defaults to 10. */
@@ -6714,6 +6766,23 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-web -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-wechat -->
+<a id="deepseek-aidsh-tool-wechat"></a>
+
+## `@deepseek-ai/dsh-tool-wechat`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/tool-wechat/src/index.ts:24`](../packages/fork/tool-wechat/src/index.ts)
+
+```ts config-catalog
+/** Which WeChat tools a preset row exposes. */
+export interface Config {
+  /** Expose only `defer_deliver`, for the job workflows whose final answer is delivered later. */
+  deferOnly?: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-wechat -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-workflow -->
 <a id="deepseek-aidsh-tool-workflow"></a>
@@ -7299,7 +7368,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/wechat/src/index.ts:101`](../packages/fork/wechat/src/index.ts)
+- `source`: [`packages/fork/wechat/src/index.ts:103`](../packages/fork/wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -7588,7 +7657,6 @@ export interface Config {
 | `@deepseek-ai/dsh-message-quotes` | — | [`packages/session/message-quotes/src/index.ts`](../packages/session/message-quotes/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
 | `@deepseek-ai/dsh-owner-memory-admin` | — | [`packages/fork/owner-memory-admin/src/index.ts`](../packages/fork/owner-memory-admin/src/index.ts) |
-| `@deepseek-ai/dsh-owner-relay` | — | [`packages/fork/owner-relay/src/index.ts`](../packages/fork/owner-relay/src/index.ts) |
 | `@deepseek-ai/dsh-plugin-config` | `connection` · `configEditor` | [`packages/fork/plugin-config/src/index.ts`](../packages/fork/plugin-config/src/index.ts) |
 | `@deepseek-ai/dsh-plugin-recommendations` | `pluginManager` · `agents` · `skills` · `actionCards` | [`packages/extensions/plugin-recommendations/src/index.ts`](../packages/extensions/plugin-recommendations/src/index.ts) |
 | `@deepseek-ai/dsh-qq-login` | `connection` · `qq` | [`packages/fork/qq-login/src/index.ts`](../packages/fork/qq-login/src/index.ts) |
@@ -7616,7 +7684,6 @@ export interface Config {
 | `@deepseek-ai/dsh-tool-session-control` | `tools` · `sessionController` · `workspaceRegistry` | [`packages/session/tool-session-control/src/index.ts`](../packages/session/tool-session-control/src/index.ts) |
 | `@deepseek-ai/dsh-tool-session-list` | `tools` · `sessions` · `sessionQuery` · `workspaceRegistry` · `sessionProjections` | [`packages/session-query/tool-session-list/src/index.ts`](../packages/session-query/tool-session-list/src/index.ts) |
 | `@deepseek-ai/dsh-tool-voice` | `tools` | [`packages/fork/tool-voice/src/index.ts`](../packages/fork/tool-voice/src/index.ts) |
-| `@deepseek-ai/dsh-tool-wechat` | `tools` | [`packages/fork/tool-wechat/src/index.ts`](../packages/fork/tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-tools` | `systemPrompt` | [`packages/core/tools/src/index.ts`](../packages/core/tools/src/index.ts) |
 | `@deepseek-ai/dsh-user-questions` | — | [`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts) |
 | `@deepseek-ai/dsh-webhook` | `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` | [`packages/experimental/webhook/src/index.ts`](../packages/experimental/webhook/src/index.ts) |

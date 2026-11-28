@@ -5,8 +5,9 @@ const REPO = 'StevenLi-phoenix/jobapplication'
 const LABELS = new Map([
   ['approval', 'needs-approval'], ['question', 'question'], ['owner', 'owner-action'], ['upload', 'upload'],
 ])
-// The tracker API's own lifecycle states; an unfinished form is `queued` with a step.
+/** The tracker API's own lifecycle states; an unfinished form is `queued` with a step. */
 export const TRACKER_STATUSES = ['queued', 'applied', 'skipped', 'rejected', 'interviewing', 'offer'] as const
+/** Posting sources the tracker accepts in a row's `source` field. */
 export const TRACKER_SOURCES = ['handshake', 'linkedin', 'company_site', 'referral'] as const
 const STATUSES = new Set<string>(TRACKER_STATUSES)
 const SOURCES = new Set<string>(TRACKER_SOURCES)
@@ -64,7 +65,6 @@ function postingUrl(value: string): string {
  * @returns The endpoint selector and JSON payload.
  */
 export function trackerCall(args: TrackerArguments): ['add_application' | 'update_application', string] {
-  if (args.operation !== 'append' && args.operation !== 'update') throw new Error('Unsupported tracker operation.')
   const company = validateText(args.company, 'company', 180)
   const role = validateText(args.role, 'role', 240)
   const url = postingUrl(args.url)
@@ -272,7 +272,16 @@ export class IssueItems {
 
   constructor(private readonly run: CommandRunner) {}
 
-  /** List a bounded page, marking shown open items eligible for a later close. */
+  /**
+   * List a bounded page, marking shown open items eligible for a later close.
+   * @param session - trusted identity of the calling Session; its eligible-item set is updated.
+   * @param kind - workflow kind: approval, question, owner or upload.
+   * @param state - which issue states to list.
+   * @param limit - maximum issues to fetch, an integer from 1 through 50.
+   * @param signal - cancellation of the GitHub command.
+   * @returns a JSON array of issues (number, title, state, body cut to 2500 characters, labels).
+   * @throws Error - when the kind is unknown or the limit is out of range.
+   */
   async list(session: string, kind: string, state: 'open' | 'closed' | 'all', limit: number, signal: AbortSignal): Promise<string> {
     const label = labelOf(kind)
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new Error('Issue limit must be an integer from 1 through 50.')
@@ -298,6 +307,11 @@ export class IssueItems {
   /**
    * Read one issue with its latest comments; the owner answers questions and approvals there.
    * An open item with a workflow label becomes eligible for a later comment or close in this Session.
+   * @param session - trusted identity of the calling Session; its eligible-item set is updated.
+   * @param number - GitHub issue number, a positive integer.
+   * @param signal - cancellation of the GitHub command.
+   * @returns a JSON object of the issue with its last 20 comments (each cut to 1500 characters) and the omitted-comment count.
+   * @throws Error - when the number is invalid or GitHub returns a different issue.
    */
   async view(session: string, number: number, signal: AbortSignal): Promise<string> {
     if (!Number.isSafeInteger(number) || number < 1) throw new Error('Issue number must be a positive integer.')
@@ -317,7 +331,15 @@ export class IssueItems {
     return JSON.stringify({ ...issue, body: issue.body.slice(0, 2500), comments, omittedComments })
   }
 
-  /** Post a bounded comment only to a currently open item previously listed in this Session. */
+  /**
+   * Post a bounded comment only to a currently open item previously listed in this Session.
+   * @param session - trusted identity of the calling Session.
+   * @param number - GitHub issue number previously listed or viewed in this Session.
+   * @param text - comment body, validated to at most 1500 characters.
+   * @param signal - cancellation of the GitHub command.
+   * @returns a one-line confirmation naming the issue.
+   * @throws Error - when the text is invalid, or the issue was not listed in this Session or is no longer open with its label.
+   */
   async comment(session: string, number: number, text: string, signal: AbortSignal): Promise<string> {
     const body = validateText(text, 'text', 1500)
     await this.#listedOpen(session, number, signal)
@@ -333,7 +355,15 @@ export class IssueItems {
     if (issue.number !== number || issue.state !== 'OPEN' || !issue.labels.some(item => item.name === label)) throw new Error('Issue is no longer open with that workflow label.')
   }
 
-  /** Close a previously listed open item, after confirming current state and workflow label. */
+  /**
+   * Close a previously listed open item, after confirming current state and workflow label.
+   * @param session - trusted identity of the calling Session; the item leaves its eligible set.
+   * @param number - GitHub issue number previously listed or viewed in this Session.
+   * @param reason - closure reason: `completed` or `not planned`.
+   * @param signal - cancellation of the GitHub command.
+   * @returns a one-line confirmation naming the issue and reason.
+   * @throws Error - when the reason is invalid, or the issue was not listed in this Session or is no longer open with its label.
+   */
   async close(session: string, number: number, reason: string, signal: AbortSignal): Promise<string> {
     if (reason !== 'completed' && reason !== 'not planned') throw new Error('Closure reason must be completed or not planned.')
     await this.#listedOpen(session, number, signal)
@@ -342,7 +372,16 @@ export class IssueItems {
     return `Closed #${number} as ${reason}.`
   }
 
-  /** Create a workflow issue unless GitHub already reports the same workflow key. */
+  /**
+   * Create a workflow issue unless GitHub already reports the same workflow key.
+   * @param kind - workflow kind: approval, question, owner or upload.
+   * @param ref - dedup reference: a lowercase slug of at most 80 characters, or a posting URL; it forms the workflow key with the kind.
+   * @param title - issue title, validated to at most 200 characters.
+   * @param text - issue body, validated to at most 1500 characters; the workflow key is appended to it.
+   * @param signal - cancellation of the GitHub commands.
+   * @returns `open <number>` or `closed <number>` when the key already has an issue, otherwise `created <number>`.
+   * @throws Error - when an argument is invalid or GitHub does not return the expected issue URL.
+   */
   async create(kind: string, ref: string, title: string, text: string, signal: AbortSignal): Promise<string> {
     const label = labelOf(kind)
     const marker = issueMarker(kind, ref)
@@ -376,4 +415,17 @@ export class IssueItems {
     this.#recent.set(marker, number)
     return `created ${number}`
   }
+}
+
+/**
+ * Strict-schema providers (Codex, the deployment's default route) send every declared property and fill the unused
+ * ones with '', [], 0 or false. Treat those fillers as absent, so each operation reads only the fields it uses and
+ * never fails because a field it does not use was sent (2026-11-27: the first job-lead run looped on read_runbook).
+ * @param args - model-supplied arguments.
+ * @param keepFalse - keep `false` booleans (an append states them; an update would overwrite a stored true).
+ * @returns the arguments without filler values.
+ */
+export function present<T extends Record<string, unknown>>(args: T, keepFalse = true): Partial<T> {
+  return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined && value !== null && value !== ''
+    && value !== 0 && !(Array.isArray(value) && value.length === 0) && (keepFalse || value !== false))) as Partial<T>
 }

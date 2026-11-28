@@ -20,8 +20,14 @@ import type { HoldResult, SendFileResult, SendTextResult, WechatChannel } from '
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 
+/** Which WeChat tools a preset row exposes. */
+export interface Config {
+  /** Expose only `defer_deliver`, for the job workflows whose final answer is delivered later. */
+  deferOnly?: boolean
+}
+
 /** Limit the job workflows to deferred final-answer delivery. */
-export const Config = z.object({ deferOnly: z.boolean().default(false) })
+export const Config: z<Config> = z.object({ deferOnly: z.boolean().default(false) })
 
 /** Plugin name. */
 export const name = 'tool-wechat'
@@ -150,7 +156,7 @@ function deferOutput(result: HoldResult): DeferOutput {
  * @param ctx - the preset scope's context.
  * @param config - whether only deferred delivery is exposed.
  */
-export function apply(ctx: Context, config: { deferOnly?: boolean } = {}): void {
+export function apply(ctx: Context, config: Config = {}): void {
   ctx.inject(['ownerNotifier'], (scoped) => {
     const channel = scoped.ownerNotifier as Partial<Pick<WechatChannel, 'sendFile' | 'holdDelivery' | 'sendText' | 'delivery' | 'canTellJobLead' | 'tellJobLead' | 'isJobLeadReport'>>
     if (config.deferOnly !== true && channel.isJobLeadReport !== undefined) {

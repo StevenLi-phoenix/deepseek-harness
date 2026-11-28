@@ -3,7 +3,7 @@ import { constants } from 'node:fs'
 import { lstat, open, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { CredentialVault } from './credentials.ts'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
@@ -33,9 +33,12 @@ const removed = new Set(['allowOrigin', 'newTab', 'urlSubstring'])
 const barePdf = /^[a-zA-Z0-9_-]+\.pdf$/u
 const coverLetter = /^cover_letters\/([a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}\.(?:pdf|docx))$/u
 const docxType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const SNAPSHOT_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const satisfies readonly ImageMediaType[]
+const REQUIRED_INTEGER = { type: 'integer', required: true } as const
 
 /** Strict upload policy for exact PDF names; never give Chromium a local filesystem path. */
 export class JobApplyUploads {
+  /** Absolute `private/` and `cover_letters/` directories under the configured root, where approved upload files live. */
   readonly dirs: readonly string[]
   readonly #files: ReadonlyMap<string, string>
   readonly #root: string
@@ -57,7 +60,12 @@ export class JobApplyUploads {
     this.#log = log
   }
 
-  /** @param files - exact basenames from the tool call. @returns authorized PDF payloads, in call order. */
+  /**
+   * Map each requested name to a mapped PDF or a `cover_letters/` PDF or DOCX and read it as a verified regular file.
+   * @param files - exact mapped basenames or `cover_letters/` paths from the tool call.
+   * @returns the authorized upload payloads, in call order.
+   * @throws UploadRefusedError - when the count is outside the upload limit, a name is not permitted, or a file fails the safety checks.
+   */
   async resolve(files: readonly string[]): Promise<UploadFile[]> {
     if (files.length < 1 || files.length > MAX_UPLOAD_FILES) throw new UploadRefusedError('invalid upload count')
     const sources = files.map((path) => {
@@ -191,10 +199,10 @@ export function mountJobApplyBrowser(ctx: Context, config: Config, restriction: 
         path: { type: 'string', required: true },
         image: { type: 'object', required: true, additionalProperties: false, properties: {
           attachmentId: { type: 'string', required: true },
-          mediaType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], required: true },
-          bytes: { type: 'integer', required: true },
-          width: { type: 'integer', required: true },
-          height: { type: 'integer', required: true },
+          mediaType: { type: 'string', enum: SNAPSHOT_MEDIA_TYPES, required: true },
+          bytes: REQUIRED_INTEGER,
+          width: REQUIRED_INTEGER,
+          height: REQUIRED_INTEGER,
         } },
       } },
       render: (_args, value) => [

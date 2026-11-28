@@ -29,7 +29,7 @@ describe('narrow tracker calls', () => {
     expect(request).toHaveBeenCalledOnce()
     expect(request).toHaveBeenCalledWith('https://mcp.lishuyu.app/api/jobtracker/add_application', {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      redirect: 'error', signal: expect.any(AbortSignal), body: trackerCall(row)[1],
+      redirect: 'error', signal: expect.any(AbortSignal) as AbortSignal, body: trackerCall(row)[1],
     })
   })
 
@@ -74,7 +74,7 @@ describe('narrow tracker calls', () => {
     expect(ids(await listed({ company: 'TikTok' }, request))).toEqual([rows[2]!.id])
     expect(ids(await listed({ url: 'https://www.jobs.example.com/2/?utm_source=x' }, request))).toEqual([rows[1]!.id])
     // A role that matches nothing falls back to every row for the company, so a lookup never dead-ends.
-    expect(await listed({ company: 'Shield AI', role: 'Hardware Intern' }, request)).toMatchObject({ matched: 2, note: expect.stringMatching(/every row for the company/u) })
+    expect(await listed({ company: 'Shield AI', role: 'Hardware Intern' }, request)).toMatchObject({ matched: 2, note: expect.stringMatching(/every row for the company/u) as string })
     expect(await listed({ company: 'Nobody Corp' }, request)).toMatchObject({ matched: 0, rows: [] })
   })
 

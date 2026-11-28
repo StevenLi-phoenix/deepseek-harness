@@ -258,6 +258,8 @@ export const FORK_SERVICE_PAGE: Readonly<Record<string, string>> = {
 /** Fork services for `SERVICE_WALK_EXEMPTIONS` in `gen-cordis-catalog.ts`, with the reason each is left out of the service walk. */
 export const FORK_SERVICE_WALK_EXEMPTIONS: Readonly<Record<string, string>> = {
   settingsNavigation: 'fork-local client-side Settings navigation — packages/fork/UPSTREAM.md owns the entry',
+  headlessBrowserJobBridge: 'fork-local Host-only bridge from the root browser to the job-apply preset mount — packages/fork/tool-job-apply/README.md owns the entry',
+  jobApplyBrowser: 'fork-local current-tab context for gmail_verification_code in the job-apply scope — packages/fork/tool-job-apply/README.md owns the entry',
 }
 
 /** Fork event scopes for `EVENT_SCOPE_PAGE` in `gen-cordis-catalog.ts`. */
@@ -312,6 +314,8 @@ export const FORK_TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   MessageView: 'fork-local Gmail message view is owned by packages/fork/gmail/README.md',
   SavedAttachment: 'fork-local saved Gmail attachment is owned by packages/fork/gmail/README.md',
   Outgoing: 'fork-local outgoing Gmail message is owned by packages/fork/gmail/README.md',
+  VerificationLookup: 'fork-local verification-code lookup is owned by packages/fork/gmail/README.md',
+  VerificationProof: 'fork-local verification code or link is owned by packages/fork/gmail/README.md',
   DraftOutcome: 'fork-local Gmail draft result is owned by packages/fork/gmail/README.md',
   SendRequest: 'fork-local Gmail send request is owned by packages/fork/gmail/README.md',
   SendOutcome: 'fork-local Gmail send result is owned by packages/fork/gmail/README.md',

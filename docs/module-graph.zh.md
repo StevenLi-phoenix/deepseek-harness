@@ -390,6 +390,7 @@ flowchart TD
     pkg_tool_bili["tool-bili"]
     pkg_tool_courses["tool-courses"]
     pkg_tool_gmail["tool-gmail"]
+    pkg_tool_job_apply["tool-job-apply"]
     pkg_tool_monitor["tool-monitor"]
     pkg_tool_push["tool-push"]
     pkg_tool_qq["tool-qq"]
@@ -1118,6 +1119,7 @@ flowchart TD
   pkg_tool_bili --> pkg_service_kit
   pkg_tool_bili --> pkg_tools
   pkg_tool_bili --> pkg_util_values
+  pkg_tool_job_apply --> pkg_tools
   pkg_tool_push --> pkg_credentials
   pkg_tool_push --> pkg_tools
   pkg_repeat_tool_reminder --> pkg_agent
@@ -2211,6 +2213,7 @@ flowchart TD
 | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | `extensions` | [`agent`](../packages/core/agent), [`error`](../packages/util/error), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`message-feedback`](../packages/feedback/message-feedback) | `feedback` | [`command-feedback`](../packages/feedback/command-feedback), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`typert-protocol`](../packages/typert/protocol) |
 | [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`service-kit`](../packages/fork/service-kit), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-job-apply`](../packages/fork/tool-job-apply) | `fork` | [`tools`](../packages/core/tools) |
 | [`tool-push`](../packages/fork/tool-push) | `fork` | [`credentials`](../packages/credentials/credentials), [`tools`](../packages/core/tools) |
 | [`repeat-tool-reminder`](../packages/guard/repeat-tool-reminder) | `guard` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools) |
 | [`tool-call-timeout-policy`](../packages/guard/timeout-policy) | `guard` | [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |

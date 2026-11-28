@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-28-tool-filter-preserve-local.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-28-tool-filter-preserve-local.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-28-tool-filter-preserve-local:
+  en: 2a60a5772ceebcd9
+  zh: d4b1d200a96f50cf
+/2026-11-28-tool-filter-preserve-local/summary:
+  en: 319506fb75ca4c93
+  zh: 0f921ec44600cff2
+/2026-11-28-tool-filter-preserve-local/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-28-tool-filter-preserve-local/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-28-tool-filter-preserve-local/compatibility:
+  en: 5aa96eb1aba7f9fc
+  zh: 843f39c9abd75032
+/2026-11-28-tool-filter-preserve-local/verification:
+  en: f16487423eb783d2
+  zh: 5546aac1de8fbe66
+/2026-11-28-tool-filter-preserve-local/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

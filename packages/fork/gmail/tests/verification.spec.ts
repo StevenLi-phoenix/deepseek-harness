@@ -27,7 +27,7 @@ function fixture(messages: GmailMessage[], options: { nextPageToken?: string; fu
   const api = new GmailApi({
     timeoutMs: 1000, accessToken: async () => 'fake-token', retryDelaysMs: [],
     fetch: async (input) => {
-      const url = new URL(String(input))
+      const url = new URL(input instanceof Request ? input.url : input)
       calls.push(url)
       if (url.pathname.endsWith('/messages')) return Response.json({ messages: messages.map(({ id }) => ({ id })), nextPageToken: options.nextPageToken })
       const id = url.pathname.split('/').at(-1)

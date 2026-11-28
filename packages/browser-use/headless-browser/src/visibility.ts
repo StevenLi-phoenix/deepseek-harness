@@ -584,6 +584,7 @@ export function findToggleAim(target: Element): { readonly x: number; readonly y
   if (view === null) return null
   const element = target instanceof view.HTMLLabelElement ? target.control : target
   if (!(element instanceof view.HTMLInputElement) || (element.type !== 'checkbox' && element.type !== 'radio')) return null
+  /* jscpd:ignore-start -- Playwright serialises each function alone, so findToggleStandIn's paint test and control list repeat here. */
   // oxlint-disable-next-line sonarjs/no-identical-functions -- Playwright serialises each function alone, so the paint test repeats
   const painted = (node: Element): boolean => {
     const box = node.getBoundingClientRect()
@@ -599,6 +600,7 @@ export function findToggleAim(target: Element): { readonly x: number; readonly y
   }
   const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
   const labels = Array.from(element.labels ?? [])
+  /* jscpd:ignore-end */
   if (labels.some(painted)) return null
   const box = element.getBoundingClientRect()
   if (box.width * box.height <= 0 || typeof element.ownerDocument.elementFromPoint !== 'function') return null
@@ -704,9 +706,12 @@ export function readElementFacts(value: unknown): ElementFacts {
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
   const ariaHiddenOwn = record.ariaHiddenOwn
   if (ariaHiddenOwn !== undefined && typeof ariaHiddenOwn !== 'boolean') throw new Error('the visibility probe returned no ariaHiddenOwn')
-  const labelAim = record.labelAim as { x?: unknown; y?: unknown } | undefined
-  if (labelAim !== undefined && (typeof labelAim !== 'object' || labelAim === null || typeof labelAim.x !== 'number' || typeof labelAim.y !== 'number'
-    || !Number.isFinite(labelAim.x) || !Number.isFinite(labelAim.y))) throw new Error('the visibility probe returned no labelAim')
+  const aim: unknown = record.labelAim
+  const aimAt = typeof aim === 'object' && aim !== null ? aim as { x?: unknown; y?: unknown } : undefined
+  const labelAim = typeof aimAt?.x === 'number' && typeof aimAt.y === 'number' && Number.isFinite(aimAt.x) && Number.isFinite(aimAt.y)
+    ? { x: aimAt.x, y: aimAt.y }
+    : undefined
+  if (aim !== undefined && labelAim === undefined) throw new Error('the visibility probe returned no labelAim')
   return {
     name: text('name'),
     value: text('value'),
@@ -726,7 +731,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     occlusion: number('occlusion'),
     ...coveredBy === undefined ? {} : { coveredBy },
     ...markup === undefined ? {} : { markup },
-    ...labelAim === undefined ? {} : { labelAim: { x: labelAim.x as number, y: labelAim.y as number } },
+    ...labelAim === undefined ? {} : { labelAim },
     clippedBy: number('clippedBy'),
     clippingFraction: number('clippingFraction'),
   }

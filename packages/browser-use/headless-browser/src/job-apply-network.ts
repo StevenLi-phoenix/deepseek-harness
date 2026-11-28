@@ -32,12 +32,20 @@ const mailProviders = new Set(['google.com', 'office.com', 'office365.com', 'mic
 const localSuffixes = ['localhost', 'local', 'internal', 'home.arpa', 'ts.net']
 const hostMatches = (host: string, name: string): boolean => host === name || host.endsWith(`.${name}`)
 
-/** @param url - candidate URL. @returns a log-safe hostname, never a path or query. */
+/**
+ * Reduce a URL to its lowercase hostname without a trailing dot, so logs and errors never carry a path or query.
+ * @param url - candidate URL.
+ * @returns the hostname, or '[invalid URL]' when the URL does not parse or has no hostname.
+ */
 export function safeHost(url: string): string {
   return URL.parse(url)?.hostname.replace(/\.$/u, '').toLowerCase() || '[invalid URL]'
 }
 
-/** @param host - a DNS name. @returns its registrable domain, including private public suffixes. */
+/**
+ * Resolve a DNS name to its registrable domain, treating private suffixes such as `github.io` as public suffixes.
+ * @param host - a DNS name.
+ * @returns the registrable domain, or null when the host has none.
+ */
 export function registrableDomain(host: string): string | null {
   return getDomain(host, { allowPrivateDomains: true })
 }
@@ -58,7 +66,12 @@ function isPublicCareerUrl(raw: string, url: URL): boolean {
   return segments.every(publicCareerSegment) && (url.hash === '' || publicCareerSegment(url.hash.slice(1)))
 }
 
-/** @param raw - candidate URL. @returns whether the shared job profile must refuse it. */
+/**
+ * Decide whether the shared job profile must refuse a URL: non-HTTP(S), credentialed, local or IP hosts, NYU hosts other
+ * than its login pages, denied hosts other than public career pages, and mail-provider inbox paths.
+ * @param raw - candidate URL.
+ * @returns true when navigation to the URL must be refused, including when it does not parse.
+ */
 export function deniedJobUrl(raw: string): boolean {
   const url = URL.parse(raw)
   if (url === null || (url.protocol !== 'https:' && url.protocol !== 'http:') || url.username !== '' || url.password !== '') return true

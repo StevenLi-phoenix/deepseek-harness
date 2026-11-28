@@ -2582,6 +2582,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'one summary per thread.',
       },
       {
+        signature: 'verificationCode(account: string, lookup: VerificationLookup): Promise<VerificationProof | null>',
+        description: 'Read only the newest verification code or link from a browser-authorized sender domain.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'lookup', description: 'the approved sender and receipt bounds.' }],
+        returns: 'a reduced code or link result, or null when no code matched.',
+      },
+      {
         signature: 'thread(account: string, threadId: string, keepQuotes: boolean = false): Promise<ThreadView>',
         description: 'Read one thread: its newest messages in full.',
         parameters: [{ name: 'account', description: 'account id.' }, { name: 'threadId', description: 'thread id.' }, { name: 'keepQuotes', description: 'keep the quoted history of each reply.' }],
@@ -3445,6 +3451,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'The relay.',
     description: 'The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.',
     methods: [
+      {
+        signature: 'readonly jobLeadSessionId: SessionId | undefined',
+        description: 'The sole target of the job-lead route.',
+        parameters: [],
+      },
       {
         signature: 'registerChannel(channel: RelayChannel): () => void',
         description: 'Add a channel.',
@@ -12914,7 +12925,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolRestriction',
-    declaration: 'export interface ToolRestriction {\n    readonly allow?: readonly string[];\n    readonly deny?: readonly string[];\n}',
+    declaration: 'export interface ToolRestriction {\n    readonly allow?: readonly string[];\n    readonly deny?: readonly string[];\n    readonly preserveLocal?: boolean;\n}',
   },
   {
     name: 'ToolResult',
@@ -13225,6 +13236,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UserMessage extends MessageBase {\n    readonly role: \'user\';\n}',
   },
   {
+    name: 'VerificationLookup',
+    declaration: 'export interface VerificationLookup {\n    readonly domain: string;\n    readonly domainOf: (host: string) => string | null;\n    readonly allowsLinkHost: (host: string) => boolean;\n    readonly after: number;\n    readonly before: number;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'VerificationProof',
+    declaration: 'export type VerificationProof = ({\n    readonly code: string;\n    readonly link: null;\n} | {\n    readonly code: null;\n    readonly link: string;\n}) & {\n    readonly domain: string;\n    readonly receivedAt: number;\n    readonly ambiguous: boolean;\n};',
+  },
+  {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
   },
@@ -13306,11 +13325,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WebFetchProvider',
-    declaration: 'export interface WebFetchProvider {\n    readonly id: string;\n    readonly title?: string;\n    readonly description?: LocalizedText;\n    available(): boolean;\n    ready?(llmProvider: string | undefined): Promise<boolean>;\n    fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>;\n}',
+    declaration: 'export interface WebFetchProvider {\n    readonly id: string;\n    readonly title?: string;\n    readonly description?: LocalizedText;\n    available(): boolean;\n    ready?(llmProvider: string | undefined): Promise<boolean>;\n    fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>;\n    fetchPublic?(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>;\n}',
   },
   {
     name: 'WebFetchRequest',
-    declaration: 'export interface WebFetchRequest {\n    readonly url: string;\n}',
+    declaration: 'export interface WebFetchRequest {\n    readonly url: string;\n    readonly publicOnly?: boolean;\n}',
   },
   {
     name: 'WebFetchResult',

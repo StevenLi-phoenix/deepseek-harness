@@ -16,7 +16,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { BusError, MessageBus, type BusPost } from './bus.ts'
 
-export { BusError, MessageBus } from './bus.ts'
+export { BusError } from './bus.ts'
 export type * from './bus.ts'
 
 /** Plugin name. */
@@ -101,7 +101,7 @@ interface PushArgs {
  * @param config - source, channel and push priority.
  * @returns the message, or why nothing is posted.
  */
-export function pushMessage(args: PushArgs, config: Pick<Config, 'source' | 'channel' | 'pushPriority'>): BusPost | { notPosted: string } {
+function pushMessage(args: PushArgs, config: Pick<Config, 'source' | 'channel' | 'pushPriority'>): BusPost | { notPosted: string } {
   const text = args.text.trim()
   if (text === '') return { notPosted: 'text is empty' }
   if (Array.from(text).length > MAX_TEXT) return { notPosted: `text is longer than ${String(MAX_TEXT)} characters; say it shorter` }

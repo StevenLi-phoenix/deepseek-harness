@@ -211,9 +211,8 @@ export function findNamedElements(key: NameKey): NamedElement[] {
     const box = element.getBoundingClientRect()
     if (box.width <= 0 || box.height <= 0) return false
     // Older engines and test documents have no checkVisibility; a drawn box is then enough.
-    const check = (element as unknown as { checkVisibility?: (options: Record<string, boolean>) => boolean }).checkVisibility
-    if (check === undefined) return true
-    return check.call(element, { checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })
+    if (!('checkVisibility' in element)) return true
+    return element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })
   }
   // A DOM without CSS.escape (a test document) gets a backslash before every character outside [\w-].
   const cssEscape = (globalThis as { CSS?: { escape?: (value: string) => string } }).CSS?.escape

@@ -22,7 +22,10 @@ import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
 import { DOWNLOAD_START_WAIT_MS, DownloadStore, ensureDownloadPrefs, isDownloadStarting, type DownloadRecord } from './downloads.ts'
 import { firstLine } from './error.ts'
-import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type PointDecisionInput, type TargetChoice } from './guard.ts'
+import {
+  ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf,
+  type Decision, type PointChoice, type PointDecisionInput, type TargetChoice, type TargetDecisionInput,
+} from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
 import { findNearMisses, missAdvice, selectorKey } from './near-miss.ts'
@@ -354,17 +357,14 @@ interface Resolution {
 async function linkHosts(page: Page): Promise<string[]> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const late = new Promise<string[]>((resolve) => { timer = setTimeout(() => { resolve([]) }, JOB_LINK_READ_MS) })
-  const read = page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), anchor => String((anchor as HTMLAnchorElement).href)).slice(0, 500))
+  const read = page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), anchor => (anchor as HTMLAnchorElement).href).slice(0, 500))
     .catch((): string[] => [])
   try {
     const hosts = new Set<string>()
     for (const href of await Promise.race([read, late])) {
-      try {
-        const url = new URL(href)
-        if (url.protocol === 'https:' || url.protocol === 'http:') hosts.add(url.hostname)
-      } catch {
-        // A page's malformed href names no host.
-      }
+      // A page's malformed href parses to null and names no host.
+      const url = URL.parse(href)
+      if (url !== null && (url.protocol === 'https:' || url.protocol === 'http:')) hosts.add(url.hostname)
     }
     return [...hosts]
   } finally {
@@ -570,6 +570,7 @@ export class HeadlessBrowserSession {
   }
 
   /**
+   * Name the host of the caller's current job tab, for checks that the page matches an approved site.
    * @param session - trusted identity of the calling Session.
    * @param signal - cancellation of the verification request.
    * @returns hostname of the current owned, admitted tab, or null.
@@ -1075,7 +1076,12 @@ export class HeadlessBrowserSession {
     })
   }
 
-  /** @param session - trusted calling Session. @param id - returned snapshot identifier. @returns the owned screenshot bytes. */
+  /**
+   * Read back a screenshot this job-apply Session captured.
+   * @param session - trusted calling Session.
+   * @param id - snapshot identifier returned by the screenshot call.
+   * @returns the PNG bytes, or undefined when the id is unknown, evicted, or owned by another Session.
+   */
   jobSnapshot(session: string, id: string): Buffer | undefined {
     return this.#jobSnapshots.get(JOB_OWNER_PREFIX + session, id)
   }
@@ -1121,14 +1127,7 @@ export class HeadlessBrowserSession {
         return { url: page.url(), point, ...await this.#openedSince(mark, popupMark) }
       }
       const resolution = await this.#resolve(page, request)
-      const target = this.#accept(this.#activeGuard().decideTarget({
-        action: 'click',
-        url: resolution.url,
-        ref: resolution.ref,
-        candidates: resolution.facts,
-        allowOrigin: request.allowOrigin === true,
-        ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
-      }))
+      const target = this.#decideOn('click', resolution, request.allowOrigin === true)
       this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const mark = this.#downloads.mark()
       const popupMark = this.tabs().popupMark()
@@ -1220,14 +1219,7 @@ export class HeadlessBrowserSession {
         return { url: page.url(), point }
       }
       const resolution = await this.#resolve(page, request)
-      const target = this.#accept(this.#activeGuard().decideTarget({
-        action: 'type',
-        url: resolution.url,
-        ref: resolution.ref,
-        candidates: resolution.facts,
-        allowOrigin: request.allowOrigin === true,
-        ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
-      }))
+      const target = this.#decideOn('type', resolution, request.allowOrigin === true)
       this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const element = resolution.element(target.index)
       if (resolution.facts[target.index]?.tag === 'select') {
@@ -1400,14 +1392,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('filling a saved credential', async () => {
       const page = await this.page(tabId)
       const resolution = await this.#resolve(page, request)
-      const target = this.#accept(this.#activeGuard().decideTarget({
-        action: 'type',
-        url: resolution.url,
-        ref: resolution.ref,
-        candidates: resolution.facts,
-        allowOrigin: false,
-        ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
-      }))
+      const target = this.#decideOn('type', resolution, false)
       const element = resolution.element(target.index)
       if (field === 'password' && !await element.evaluate(passwordInput)) {
         throw new SecretFieldError(`${resolution.ref} is not a password input (input[type=password]); a saved password is only written into one`)
@@ -1470,14 +1455,7 @@ export class HeadlessBrowserSession {
           this.#log.info('headless-browser: trigger %s is a file input; attached %d file(s) to it on %s', resolution.ref, paths.length, pageOrigin(page.url()))
           return { url: page.url(), ref: resolution.ref, inputs: inputs.length }
         }
-        const choice = this.#accept(this.#activeGuard().decideTarget({
-          action: 'click',
-          url: resolution.url,
-          ref: resolution.ref,
-          candidates: resolution.facts,
-          allowOrigin: false,
-          ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
-        }))
+        const choice = this.#decideOn('click', resolution, false)
         this.#authorizeTarget(resolution.url, resolution.facts[choice.index])
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser', { timeout: FILE_CHOOSER_WAIT_MS }),
@@ -1701,6 +1679,18 @@ export class HeadlessBrowserSession {
       const decision = this.#activeGuard().decideNavigation({ action: 'open', url, target: facts.formAction, allowOrigin: false })
       if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
     }
+  }
+
+  /** Let the guard choose one of a resolved selector's candidates for an action, or refuse. */
+  #decideOn(action: TargetDecisionInput['action'], resolution: Resolution, allowOrigin: boolean): TargetChoice {
+    return this.#accept(this.#activeGuard().decideTarget({
+      action,
+      url: resolution.url,
+      ref: resolution.ref,
+      candidates: resolution.facts,
+      allowOrigin,
+      ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
+    }))
   }
 
   #accept(decision: Decision): TargetChoice {

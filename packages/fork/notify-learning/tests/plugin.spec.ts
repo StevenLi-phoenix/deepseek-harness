@@ -14,6 +14,7 @@ import { untrustedRequestId } from '@deepseek-ai/dsh-turn-taint/origin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as NotifyLearning from '../src/index.ts'
+import { NotifyLearning as NotifyLearningService } from '../src/service.ts'
 import type { Rule } from '../src/records.ts'
 import { LearningStore } from '../src/store.ts'
 
@@ -414,7 +415,7 @@ describe('the nightly checks', () => {
     contexts.push(ctx)
     const logs: string[] = []
     ctx.logger.exporter({ levels: { default: 3 }, export: (line) => { logs.push(`${line.type} ${format(...(line.args as unknown[]))}`) } })
-    const runs = vi.spyOn(NotifyLearning.NotifyLearning.prototype, 'runIfDue').mockResolvedValue(undefined)
+    const runs = vi.spyOn(NotifyLearningService.prototype, 'runIfDue').mockResolvedValue(undefined)
     const fiber = await ctx.plugin(NotifyLearning, NotifyLearning.Config({ dir: root }))
     await vi.advanceTimersByTimeAsync(119_000)
     expect(runs).not.toHaveBeenCalled()

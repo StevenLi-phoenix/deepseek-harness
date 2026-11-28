@@ -97,7 +97,8 @@ async function liveHost(browser: JobApplyBrowser | undefined, sessionId: string 
   if (browser === undefined || sessionId === undefined || signal.aborted) return null
   try {
     const host = await browser.currentHost(sessionId, signal)
-    return signal.aborted ? null : normalizeHost(host)
+    signal.throwIfAborted()
+    return normalizeHost(host)
   } catch {
     // The runner may have lost or disposed the browser; no browser errors leave the boundary.
     return null
@@ -162,8 +163,8 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
     description: 'List connected Gmail account ids and email addresses for gmail_verification_code.',
     parameters: {},
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
-    async execute() {
-      return { accounts: gmail.accounts().map(({ id, email }) => ({ id, email })) }
+    execute() {
+      return Promise.resolve({ accounts: gmail.accounts().map(({ id, email }) => ({ id, email })) })
     },
     presentCall: () => ({ card: 'generic', title: 'Gmail accounts', kind: 'read' }),
   }))

@@ -57,7 +57,7 @@ describe('the selectors suggested for a named element', () => {
     const page = {
       evaluate: async () => [link],
       locator: (selector: string) => ({ count: async () => counts[selector] ?? 0 }),
-    } as unknown as Parameters<typeof findNearMisses>[0]
+    } as never
     expect(await findNearMisses(page, { text: 'Apply Now', exact: false })).toEqual([{ element: link, selector: 'text="Apply Now"', count: 2 }])
   })
 })

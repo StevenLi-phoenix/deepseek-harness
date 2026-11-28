@@ -7,7 +7,7 @@ import z from '@deepseek-ai/schemastery'
 import { readBatchRunbook, writeBatchRunbook } from './batch-runbook.ts'
 import { convertCoverLetter } from './cover-convert.ts'
 import { registerJobSkill } from './job-skill.ts'
-import { IssueItems, listTrackerRows, TRACKER_SOURCES, TRACKER_STATUSES, writeTrackerRow } from './operations.ts'
+import { IssueItems, listTrackerRows, present, TRACKER_SOURCES, TRACKER_STATUSES, writeTrackerRow } from './operations.ts'
 import { JobRepository, type CommandRunner } from './repo.ts'
 
 /** Narrow job application workflow tools; no caller-controlled executable, cwd, or environment. */
@@ -15,8 +15,11 @@ export const name = 'tool-job-apply'
 export const inject = ['tools']
 
 interface Config {
+  /** Absolute path of the deployment-owned job clone that every repository, log, and issue operation reads and writes. */
   root: string
+  /** Tool roster of the preset that mounts this row: `apply` fills applications, `inbox` triages replies, `lead` runs a batch. */
   mode?: 'apply' | 'inbox' | 'lead'
+  /** Trusted path of the existing batch runbook `lead` hands to its workers; ignored by the other modes. */
   batchRunbook?: string
 }
 
@@ -66,18 +69,6 @@ const TEXT_OUTPUT = {
   render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }],
 } as const
 
-/**
- * Strict-schema providers (Codex, the deployment's default route) send every declared property and fill the unused
- * ones with '', [], 0 or false. Treat those fillers as absent, so each operation reads only the fields it uses and
- * never fails because a field it does not use was sent (2026-11-27: the first job-lead run looped on read_runbook).
- * @param args - model-supplied arguments.
- * @param keepFalse - keep `false` booleans (an append states them; an update would overwrite a stored true).
- * @returns the arguments without filler values.
- */
-export function present<T extends Record<string, unknown>>(args: T, keepFalse = true): Partial<T> {
-  return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined && value !== null && value !== ''
-    && value !== 0 && !(Array.isArray(value) && value.length === 0) && (keepFalse || value !== false))) as Partial<T>
-}
 
 function textOutput(source: string, result: string): string {
   return `${source}\n${result.slice(0, 50_000)}`

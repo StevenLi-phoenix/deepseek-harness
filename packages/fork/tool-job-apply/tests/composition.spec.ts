@@ -76,8 +76,11 @@ async function setup() {
     'dsh-tool-web': Web, 'dsh-tool-wechat': WeChat,
   })
   const asBuiltin = (entry: Row) => ({ ...entry, name: entry.name.replace('@deepseek-ai/', 'cordis:') })
+  // The compaction group adds no tool and needs the Host's token meter and session projections, which this host
+  // does not mount; preset-compaction.spec.ts checks it.
+  const toolRows = (plugins: Row[] | undefined) => plugins?.filter(entry => entry.id !== 'compaction').map(asBuiltin)
   await ctx.loader.root.update(presets.map(row => ({
-    ...asBuiltin(row), config: { ...row.config, plugins: row.config?.plugins?.map(asBuiltin) },
+    ...asBuiltin(row), config: { ...row.config, plugins: toolRows(row.config?.plugins) },
   })))
   const adapter = new MockAdapter([textResponse('child done')])
   ctx.llm.registerAdapter(['mock'], adapter)

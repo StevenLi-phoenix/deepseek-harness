@@ -25,7 +25,7 @@ const FORM = `<!doctype html><title>signup</title><style>html { scroll-behavior:
 <label class="upload" for="resume">Upload résumé <input id="resume" type="file" style="display:none"></label>
 <input id="many" type="file" multiple style="opacity:0;position:absolute;width:1px;height:1px">
 <button id="chooser" type="button">Attach transcript</button>
-<span class="attachmentLabel"><span id="sfLabel">Upload from Device</span><input id="sf" type="file" aria-labelledby="sfLabel" style="opacity:0;position:absolute;width:120px;height:20px"></span>
+<span class="attachmentLabel" style="position:relative;display:inline-block"><span id="sfLabel">Upload from Device</span><input id="sf" type="file" aria-labelledby="sfLabel" style="opacity:0;position:absolute;left:0;top:0;width:100%;height:100%"></span>
 <button id="google" type="button" onclick="window.open('/popup', 'signin', 'width=480,height=600')">Continue with Google</button>
 <div style="position:relative;width:180px;height:40px"><button id="reset" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px">Reset Password</button><div id="cover" role="button" tabindex="0" aria-label="Reset Password" style="position:absolute;inset:0" onclick="document.getElementById('shown').textContent = 'reset sent'"></div></div>
 <div style="position:relative;width:180px;height:40px"><button id="decoy" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px" onclick="document.getElementById('shown').textContent = 'decoy'">Show details</button><div role="button" tabindex="0" aria-label="Continue" style="position:absolute;inset:0"></div></div>

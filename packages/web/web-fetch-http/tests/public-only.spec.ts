@@ -1,19 +1,21 @@
-import type { LookupAddress, LookupAllOptions } from 'node:dns'
+import type { LookupAddress, LookupAllOptions, LookupOptions } from 'node:dns'
 import type { LookupFunction } from 'node:net'
 import { afterEach, expect, it, vi } from 'vitest'
 import { HttpFetchProvider } from '../src/provider.ts'
+import { publicDispatcher } from '../src/public-only.ts'
 
 const mocks = vi.hoisted(() => ({
   lookup: vi.fn<(host: string, options: LookupAllOptions) => Promise<LookupAddress[]>>(),
   request: vi.fn<(url: URL) => Response>(),
   destroy: vi.fn<() => Promise<void>>(),
   pinned: vi.fn<(addresses: string | LookupAddress[]) => void>(),
+  connector: vi.fn<(lookup: LookupFunction) => void>(),
 }))
 
 vi.mock('node:dns/promises', () => ({ lookup: mocks.lookup }))
 vi.mock('undici', () => ({
   Agent: class {
-    constructor(readonly options: { connect: { lookup: LookupFunction } }) {}
+    constructor(readonly options: { connect: { lookup: LookupFunction } }) { mocks.connector(options.connect.lookup) }
     destroy = mocks.destroy
   },
   fetch: async (url: URL, init: { dispatcher: { options: { connect: { lookup: LookupFunction } } }; redirect: string }) => {
@@ -88,4 +90,44 @@ it('does not follow a redirect to another origin', async () => {
   await expect(provider.fetchPublic({ url: 'https://jobs.example.com/posting' })).rejects.toMatchObject({ code: 'WEB_REDIRECT_BLOCKED' })
   expect(mocks.lookup).toHaveBeenCalledOnce()
   expect(mocks.request).toHaveBeenCalledOnce()
+})
+
+/** The connector lookup of a fresh public dispatcher for `https://jobs.example.com/`, answering what it hands the socket. */
+async function connect(options: LookupOptions, signal = new AbortController().signal) {
+  publicDispatcher(new URL('https://jobs.example.com/'), signal)
+  const lookup = mocks.connector.mock.calls.at(-1)?.[0]
+  if (lookup === undefined) throw new Error('no dispatcher was created')
+  type Answer = { error: NodeJS.ErrnoException | null; address: string | LookupAddress[]; family: number | undefined }
+  return await new Promise<Answer>((resolve) => {
+    lookup('jobs.example.com', options, (error, address, family) => { resolve({ error, address, family }) })
+  })
+}
+
+it('hands a socket that asks for one address the first checked one of the family it names', async () => {
+  mocks.lookup.mockResolvedValue(publicAddresses)
+  expect(await connect({})).toEqual({ error: null, address: '93.184.216.34', family: 4 })
+  expect(await connect({ family: 'IPv6' })).toEqual({ error: null, address: '2606:4700::1111', family: 6 })
+  expect(await connect({ family: 'IPv4' })).toEqual({ error: null, address: '93.184.216.34', family: 4 })
+  expect(await connect({ family: 6, all: true })).toEqual({ error: null, address: [publicAddresses[1]], family: undefined })
+})
+
+it('refuses a scoped or mislabelled answer, and answers no address for a family DNS did not return', async () => {
+  for (const answer of [{ address: 'fe80::1%en0', family: 6 }, { address: '93.184.216.34', family: 6 }]) {
+    mocks.lookup.mockResolvedValueOnce([answer])
+    expect((await connect({})).error).toMatchObject({ code: 'WEB_BLOCKED_URL' })
+  }
+  mocks.lookup.mockResolvedValueOnce([publicAddresses[0]!])
+  expect((await connect({ family: 6 })).error).toMatchObject({ code: 'WEB_FETCH_DNS_FAILED' })
+})
+
+it('answers an aborted request, and passes a DNS failure on as an Error', async () => {
+  const aborted = new AbortController()
+  aborted.abort()
+  mocks.lookup.mockResolvedValueOnce(publicAddresses)
+  expect((await connect({}, aborted.signal)).error).toMatchObject({ code: 'WEB_ABORTED' })
+  const failure = new Error('getaddrinfo ENOTFOUND jobs.example.com')
+  mocks.lookup.mockRejectedValueOnce(failure)
+  expect((await connect({})).error).toBe(failure)
+  mocks.lookup.mockRejectedValueOnce('resolver down')
+  expect((await connect({})).error).toMatchObject({ message: 'DNS lookup failed', cause: 'resolver down' })
 })
