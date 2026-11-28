@@ -722,11 +722,14 @@
               jobApplyBrowser: job-apply-verification
             config:
               mode: verification-only
+          # One web_fetch window stays under the base spill-policy cap (12,500 tokens, about 50,000 characters): a
+          # job-apply worker cannot read a spill file, so a longer window lost its middle (find-simplify, 2026-11-28).
           - id: tool-web
             name: '@deepseek-ai/dsh-tool-web'
             config:
               publicOnly: true
               fetch: true
+              fetchMaxOutputChars: 48000
           - id: defer-delivery
             name: '@deepseek-ai/dsh-tool-wechat'
             config:

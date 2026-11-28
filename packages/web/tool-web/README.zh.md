@@ -69,7 +69,7 @@ web_search({ queries: ['deepseek harness documentation'] })
 
 用一个 `url` 调用 `web_fetch`。HTML 主体经过过滤后渲染为 markdown（含 GFM 表格与删除线）；文本主体在不可信内容提示下原样通过。非 2xx 状态会在结果中报告，而不是作为错误抛出。截断内容会追加 `(Content truncated. Fetch a more specific URL or section for the full text.)`。
 
-超过一次输出长度的文本按窗口返回：结果带上本窗口的 `start`、下一个窗口的 `next` 偏移和整段文本的 `totalChars`，标题行写明字符范围，结尾说明还剩多少字符、用哪个 `start` 接着读。带上这个 `start` 再调用会重新抓取该 URL 并返回下一个窗口，所以工人可以分段读完 SimplifyJobs 约 85 万字符的 README，而不是只看到开头。能装进一次输出、又从头读的文本照旧返回。窗口能覆盖的文本仍受提供方自身的主体上限约束。
+超过一次输出长度的文本按窗口返回：结果带上本窗口的 `start`、下一个窗口的 `next` 偏移和整段文本的 `totalChars`，标题行写明字符范围，结尾说明还剩多少字符、用哪个 `start` 接着读。带上这个 `start` 再调用会重新抓取该 URL 并返回下一个窗口，所以工人可以分段读完 SimplifyJobs 约 85 万字符的 README，而不是只看到开头。能装进一次输出、又从头读的文本照旧返回。窗口能覆盖的文本仍受提供方自身的主体上限约束。模型读不到溢出文件的场合，`fetchMaxOutputChars` 要低于 spill policy 的内联上限（约四个字符算一个 token），否则每个窗口只剩预览：DSH 的 job-apply preset 在 base 的 12,500 token 上限下设为 48,000。
 
 ```text
 web_fetch({ url: 'https://example.com' })
