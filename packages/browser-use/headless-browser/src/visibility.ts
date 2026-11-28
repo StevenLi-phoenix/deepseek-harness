@@ -90,6 +90,12 @@ export interface ElementFacts {
    * which scores as the element's own.
    */
   readonly ariaHiddenOwn?: boolean
+  /**
+   * Whether the element is a `<label>` whose control sits outside any `aria-hidden` subtree. Such a label's own
+   * `aria-hidden` only keeps a screen reader from reading the control's name twice (Eightfold's radios at
+   * apply.careers.microsoft.com), and a click on it reaches that control. Absent means it is not.
+   */
+  readonly labelsExposedControl?: boolean
   /** Width in CSS pixels of the box a person aims at: the border box, or a searchable dropdown's control around its caret-wide input. */
   readonly width: number
   /** Height in CSS pixels of the same box. */
@@ -425,6 +431,8 @@ export function probeElement(element: Element): ElementFacts {
     return parent === null ? openTag(node) : `${openTag(node)} in ${openTag(parent)}`
   }
   const markup = cover === null ? inParent(element) : `${inParent(element)}; under ${inParent(cover)}`
+  const labelled = element instanceof view.HTMLLabelElement ? element.control : null
+  const labelsExposedControl = labelled !== null && labelled.closest('[aria-hidden="true"]') === null
   const href = element.closest('a[href]')?.getAttribute('href') ?? null
   const form = element.closest('form')
   const formActionAttribute = element.getAttribute('formaction')
@@ -445,6 +453,7 @@ export function probeElement(element: Element): ElementFacts {
     pointerEvents: own.pointerEvents,
     ariaHidden,
     ariaHiddenOwn: element.getAttribute('aria-hidden') === 'true',
+    ...labelsExposedControl ? { labelsExposedControl } : {},
     width: aimWidth,
     height: aimHeight,
     viewportFraction: fraction(inViewWidth * inViewHeight),
@@ -709,6 +718,10 @@ export function readElementFacts(value: unknown): ElementFacts {
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
   const ariaHiddenOwn = record.ariaHiddenOwn
   if (ariaHiddenOwn !== undefined && typeof ariaHiddenOwn !== 'boolean') throw new Error('the visibility probe returned no ariaHiddenOwn')
+  const labelsExposedControl = record.labelsExposedControl
+  if (labelsExposedControl !== undefined && typeof labelsExposedControl !== 'boolean') {
+    throw new Error('the visibility probe returned no labelsExposedControl')
+  }
   const aim: unknown = record.labelAim
   const aimAt = typeof aim === 'object' && aim !== null ? aim as { x?: unknown; y?: unknown } : undefined
   const labelAim = typeof aimAt?.x === 'number' && typeof aimAt.y === 'number' && Number.isFinite(aimAt.x) && Number.isFinite(aimAt.y)
@@ -728,6 +741,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     pointerEvents: text('pointerEvents'),
     ariaHidden,
     ...ariaHiddenOwn === undefined ? {} : { ariaHiddenOwn },
+    ...labelsExposedControl === undefined ? {} : { labelsExposedControl },
     width: number('width'),
     height: number('height'),
     viewportFraction: number('viewportFraction'),
@@ -746,11 +760,13 @@ export function readElementFacts(value: unknown): ElementFacts {
  * you are human" button, so it fails. Inherited from an ancestor it usually means
  * a dialog library hid the page around the dialog (Phenom's screening steps put
  * their Next button there). That passes only when a person can still plainly reach
- * the control: wholly in the viewport and on top at every sampled point.
+ * the control: wholly in the viewport and on top at every sampled point. A label's
+ * own aria-hidden, over a control that keeps its own name for screen readers, is
+ * judged the same way, since a click on the label reaches that control.
  */
 function ariaHiddenFactor(facts: ElementFacts): number {
   if (!facts.ariaHidden) return 1
-  if (facts.ariaHiddenOwn !== false) return 0
+  if (facts.ariaHiddenOwn !== false && facts.labelsExposedControl !== true) return 0
   return facts.viewportFraction >= 1 && facts.occlusion >= 1 ? 1 : 0
 }
 

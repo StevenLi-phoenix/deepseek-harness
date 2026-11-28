@@ -250,6 +250,31 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await page.locator('#terms').isChecked()).toBe(false)
   }, 120_000)
 
+  it('checks an Eightfold radio through its own aria-hidden label, and refuses a label whose control is hidden too', async () => {
+    // Live apply.careers.microsoft.com job question, 2026-11-28 04:43: the "No" label scored ariaHidden 0.00, every other test 1.
+    const app = await boot()
+    const radio = (value: string, text: string): string => [
+      `<div class="radio-module_selector__tTwv3 radio-module_selector-medium__HweGs" data-test-id="Q-${text}"`,
+      ' style="position:relative;display:inline-flex;align-items:center;height:24px;margin-right:24px">',
+      `<input aria-label="${text}" id="Q-${value}" name="Q" type="radio" value="${value}"`,
+      ' style="position:absolute;left:0;top:4px;width:16px;height:16px;margin:0;opacity:0;cursor:pointer;z-index:1">',
+      `<label for="Q-${value}" class="" aria-hidden="true" style="display:inline-flex;align-items:center;padding-left:24px;cursor:pointer">${text}</label></div>`,
+    ].join('')
+    await load(app, [
+      '<fieldset style="border:0;margin:40px"><legend>Bachelor\'s degree and 2+ years, or equivalent experience? *</legend>',
+      radio('0.0', 'Yes'), radio('1.0', 'No'), '</fieldset>',
+      '<div style="margin:40px"><div aria-hidden="true" style="position:absolute;left:-9999px"><input type="checkbox" id="bot"></div>',
+      '<label for="bot" aria-hidden="true">I am a robot</label></div>',
+    ].join(''))
+    const page = await app.browser.page()
+    await app.browser.click({ selector: 'label[for="Q-1.0"]' })
+    expect(await page.locator('#Q-1\\.0').isChecked()).toBe(true)
+    await app.browser.click({ selector: 'text="Yes"' })
+    expect(await page.locator('#Q-0\\.0').isChecked()).toBe(true)
+    expect((await refusalOf(app.browser.click({ selector: 'label[for="bot"]' }))).reason).toMatch(/ariaHidden=0\.00/u)
+    expect(await page.locator('#bot').isChecked()).toBe(false)
+  }, 120_000)
+
   it('types into a react-select whose search input is transparent, as ADP draws its Country field', async () => {
     // Live ADP WorkforceNow, 2026-11-27 20:58: MDFSelectBox__input scored opacity 0 and the arrow ariaHidden 0.
     const app = await boot()

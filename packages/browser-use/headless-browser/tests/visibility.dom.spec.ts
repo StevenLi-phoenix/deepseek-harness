@@ -245,6 +245,16 @@ describe('measuring what a person sees', () => {
     expect(probeElement(find('#decoy'))).toMatchObject({ ariaHidden: true, ariaHiddenOwn: true })
   })
 
+  it('tells a label whose control screen readers still reach from one whose control is hidden too', () => {
+    mount([
+      '<input type="radio" id="no" aria-label="No"><label id="shown" for="no" aria-hidden="true">No</label>',
+      '<div aria-hidden="true"><input type="checkbox" id="bot"></div><label id="decoy" for="bot" aria-hidden="true">I am human</label>',
+      '<label id="nested" aria-hidden="true"><input type="checkbox"> Agree</label><label id="loose" aria-hidden="true">Loose</label>',
+    ].join(''))
+    expect(probeElement(find('#shown'))).toMatchObject({ ariaHiddenOwn: true, labelsExposedControl: true })
+    for (const id of ['#decoy', '#nested', '#loose']) expect(probeElement(find(id)).labelsExposedControl).toBeUndefined()
+  })
+
   it('reports an ancestor that is not displayed, aria-hidden, invisible, or not hittable', () => {
     mount('<div style="display:none" aria-hidden="true"><div style="visibility:hidden; pointer-events:none"><button id="go">Go</button></div></div>')
     expect(probeElement(find('#go'))).toMatchObject({ display: 'none', ariaHidden: true, visibility: 'hidden', pointerEvents: 'none' })

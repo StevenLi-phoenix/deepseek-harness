@@ -111,6 +111,17 @@ describe('visibility score', () => {
     expect(scoreVisibility(facts({ ariaHidden: true, ariaHiddenOwn: false, viewportFraction: 0.9 })).failing).toContain('ariaHidden')
   })
 
+  it('judges a label\'s own aria-hidden over an exposed control like an inherited one', () => {
+    const label = { ariaHidden: true, ariaHiddenOwn: true, labelsExposedControl: true }
+    expect(scoreVisibility(facts(label)).factors.ariaHidden).toBe(1)
+    expect(scoreVisibility(facts({ ...label, occlusion: 0.8 })).failing).toContain('ariaHidden')
+    expect(scoreVisibility(facts({ ...label, viewportFraction: 0.9 })).failing).toContain('ariaHidden')
+  })
+
+  it('rejects a labelsExposedControl field that is not a boolean', () => {
+    expect(() => readElementFacts({ ...facts(), labelsExposedControl: 'yes' })).toThrow('the visibility probe returned no labelsExposedControl')
+  })
+
   it('rejects an ariaHiddenOwn field that is not a boolean', () => {
     expect(() => readElementFacts({ ...facts(), ariaHiddenOwn: 'no' })).toThrow('the visibility probe returned no ariaHiddenOwn')
   })
