@@ -18,6 +18,8 @@ describe('the words a selector names its target by', () => {
     ['[role=listbox] >> text="Yes"', { text: 'Yes', exact: true }],
     ['text=Apply', { text: 'Apply', exact: false }],
     [':text-matches("zip code", "i")', { text: 'zip code', flags: 'i', exact: false }],
+    [':text-matches(\'zip code\', \'i\')', { text: 'zip code', flags: 'i', exact: false }],
+    [':text-matches("zip code")', { text: 'zip code', flags: '', exact: false }],
     ['input[placeholder="Search"]', { text: 'Search', exact: false }],
     ['internal:label="Preferred Contact Method"i', { text: 'Preferred Contact Method', exact: false }],
     ['button:has-text(\'It\\\'s me\')', { text: "It's me", exact: false }],
@@ -34,6 +36,11 @@ describe('the words a selector names its target by', () => {
     expect(selectorKey('input[type=email] >> nth=1')).toBeUndefined()
     expect(selectorKey('#nowhere')).toBeUndefined()
     expect(selectorKey('input[name=\'email\']')).toBeUndefined()
+  })
+
+  it('finds no words in a selector whose words are blank', () => {
+    expect(selectorKey('text=  ')).toBeUndefined()
+    expect(selectorKey('button:has-text("  ")')).toBeUndefined()
   })
 })
 
@@ -59,6 +66,14 @@ describe('the selectors suggested for a named element', () => {
       locator: (selector: string) => ({ count: async () => counts[selector] ?? 0 }),
     } as never
     expect(await findNearMisses(page, { text: 'Apply Now', exact: false })).toEqual([{ element: link, selector: 'text="Apply Now"', count: 2 }])
+  })
+
+  it('passes over a suggestion the page cannot count', async () => {
+    const page = {
+      evaluate: async () => [link],
+      locator: (selector: string) => ({ count: async () => selector.startsWith('role=') ? await Promise.reject(new Error('detached')) : 1 }),
+    } as never
+    expect(await findNearMisses(page, { text: 'Apply Now', exact: false })).toEqual([{ element: link, selector: 'text="Apply Now"', count: 1 }])
   })
 })
 

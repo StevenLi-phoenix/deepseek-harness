@@ -607,6 +607,15 @@ describe('sensitive-name switch', () => {
     expect(events[0]?.skipped).toBeUndefined()
   })
 
+  it('lets a Submit click through when the trusted exception admits it, and refuses one it does not', () => {
+    const asked: string[] = []
+    const guard = new ActionGuard({ allowSensitive: (input, _target, label) => { asked.push(`${input.ref}:${label}`); return input.ref === '#submit' } })
+    guard.anchor('https://site.example/start')
+    expect(guard.decideTarget({ ...submit, candidates: [facts({ name: 'Submit' })] }).target).toMatchObject({ name: 'Submit', index: 0 })
+    expect(refusalOf(guard.decideTarget({ ...submit, ref: '#other', candidates: [facts({ name: 'Submit' })] })).rule).toBe('sensitive')
+    expect(asked).toEqual(['#submit:submit', '#other:submit'])
+  })
+
   it('runs the same Submit click with the rule off and records it as skipped', () => {
     const { guard, events } = guarded({ sensitiveActions: false })
     const decision = guard.decideTarget({ ...submit, candidates: [facts({ name: 'Submit' })] })

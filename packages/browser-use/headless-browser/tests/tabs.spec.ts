@@ -279,6 +279,27 @@ describe('browser tabs', () => {
     expect(tabs.state()[0]?.loading).toBe(false)
   })
 
+  it('keeps a new tab whose first navigation failed, and closes a prepared one whose setup failed even when that close fails', async () => {
+    const { context, tabs } = await boot()
+    context.onPage = (page) => { page.failNextNavigation = 'net::ERR_NAME_NOT_RESOLVED' }
+    await expect(tabs.create('https://nowhere.example')).rejects.toBeInstanceOf(TabNavigationError)
+    expect(tabs.state()).toHaveLength(1)
+    context.onPage = (page) => { page.failNextClose = 'Target page, context or browser has been closed' }
+    await expect(tabs.create('https://jobs.example.com', 'job-apply:w', async () => { throw new Error('the guard could not attach') }))
+      .rejects.toThrow('the guard could not attach')
+  })
+
+  it('hands a tab to another owner only while it is open', async () => {
+    const { tabs } = await boot()
+    const kept = await tabs.create(dataPage('kept'), 'job-apply:a')
+    const gone = await tabs.create(dataPage('gone'), 'job-apply:a')
+    await tabs.close(gone.id)
+    expect(tabs.setOwner('t9', 'job-apply:b')).toBe(false)
+    expect(tabs.setOwner(gone.id, 'job-apply:b')).toBe(false)
+    expect(tabs.setOwner(kept.id, 'job-apply:b')).toBe(true)
+    expect(tabs.owner(kept.id)).toBe('job-apply:b')
+  })
+
   it('applies the page\'s tab commands by name, and defaults to the active tab', async () => {
     const { tabs } = await boot()
     await tabs.command('new', undefined, dataPage('one'))
@@ -608,6 +629,20 @@ describe('popups', () => {
     context.open[0]!.openPopup(popup)
     expect((await waiting).map(entry => entry.tab)).toEqual(['t2'])
     expect(LOG.warn).toHaveBeenCalledWith('headless-browser: adopting a popup of %s failed: %s', 't1', 'Target page, context or browser has been closed')
+  })
+
+  it('adopts no popup that closed while it was being prepared', async () => {
+    const context = new FakeContext()
+    const tabs = new BrowserTabs({
+      context: async () => context, log: LOG,
+      preparePopup: async (popup) => { await popup.close(); return 'job-apply:w' },
+    })
+    await tabs.create(dataPage('opener'), 'job-apply:w')
+    const popup = new FakePage()
+    context.open.push(popup)
+    context.open[0]!.openPopup(popup)
+    expect(await tabs.popupsSince(0, 0)).toEqual([])
+    expect(tabs.state().map(tab => tab.id)).toEqual(['t1'])
   })
 
   it('stops waiting for a popup when the browser goes away', async () => {

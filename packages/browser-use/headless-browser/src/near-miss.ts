@@ -92,20 +92,16 @@ function unescape(text: string): string {
  * @returns the key, or nothing when the match names no words.
  */
 function keyOf(match: RegExpMatchArray, exact: boolean): NameKey | undefined {
-  const source = match[0]
   const groups = match.slice(1)
-  if (source.startsWith(':text-matches')) {
-    const text = groups[0] ?? groups[1]
-    if (text === undefined) return undefined
-    return { text: unescape(text), flags: groups[2] ?? groups[3] ?? '', exact: false }
-  }
   const quoted = groups[0] ?? groups[1]
   if (quoted !== undefined) {
+    // `:text-matches` quotes its flags after its source.
+    if (match[0].startsWith(':text-matches')) return { text: unescape(quoted), flags: groups[2] ?? groups[3] ?? '', exact: false }
     // An unquoted `text=Apply` compares like `:has-text`; a quoted one like `:text-is`.
     return { text: unescape(quoted), exact }
   }
-  const regex = groups[2]
-  if (regex !== undefined) return { text: regex, flags: groups[3] ?? '', exact: false }
+  const [regex, flags] = [groups[2], groups[3]]
+  if (regex !== undefined && flags !== undefined) return { text: regex, flags, exact: false }
   const bare = groups[4]?.trim()
   return bare === undefined || bare === '' ? undefined : { text: bare, exact: false }
 }
@@ -223,11 +219,10 @@ export function findNamedElements(key: NameKey): NamedElement[] {
   }
   const FIELD = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea, [contenteditable="true"], [role="textbox"], [role="combobox"]'
   const fieldOf = (element: Element): Element | undefined => {
-    if (element instanceof HTMLLabelElement && element.control !== null) return element.control
     let node = element.parentElement
     for (let depth = 0; node !== null && depth < 4 && node !== element.ownerDocument.body; depth += 1, node = node.parentElement) {
       const fields = node.querySelectorAll(FIELD)
-      if (fields.length === 1) return fields[0] ?? undefined
+      if (fields.length === 1) return fields[0]
       if (fields.length > 1) return undefined
     }
     return undefined

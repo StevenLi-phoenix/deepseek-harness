@@ -119,6 +119,8 @@ describe('CredentialVault', () => {
     expect((await vault.find(host, undefined, 'Acme')).id).toBe(acme.id)
     await expect(vault.find(host, 'cv@example.com')).rejects.toThrow('signin-us.ultipro.com has 2 saved accounts; pass label: Acme | Wellabe')
     await expect(vault.find(host, undefined, 'Kiewit')).rejects.toThrow('signin-us.ultipro.com has no saved password labelled Kiewit; saved labels: Acme, Wellabe')
+    await vault.create({ host: 'careers.example.com', username: 'cv@example.com' })
+    await expect(vault.find('careers.example.com', undefined, ' Kiewit ')).rejects.toThrow('careers.example.com has no saved password labelled Kiewit; saved labels: none')
     const replaced = await vault.create({ host, username: 'cv@example.com', label: 'Wellabe', replace: true })
     expect(replaced.id).toBe(wellabe.id)
     expect((await vault.find(host, undefined, 'Acme')).password).toBe(acme.password)

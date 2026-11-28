@@ -3,14 +3,25 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { chromium } from 'playwright-core'
-import { expect, it, vi } from 'vitest'
-import { Config } from '../src/config.ts'
-import { ActionGuard } from '../src/guard.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { Config, type JobApplyConfig } from '../src/config.ts'
+import type { CredentialVault } from '../src/credentials.ts'
+import { ActionGuard, type SecurityEvent } from '../src/guard.ts'
 import { deniedJobUrl } from '../src/job-apply-network.ts'
-import { JobApplyUploads } from '../src/job-apply.ts'
+import { JobApplyUploads, mountJobApplyBrowser } from '../src/job-apply.ts'
 import { HeadlessBrowserSession, JOB_TAB_IDLE_MS } from '../src/session.ts'
 import { MAX_TABS } from '../src/tabs.ts'
+import { TakeoverState } from '../src/takeover.ts'
+import { registerBrowserTools, type ToolDeps } from '../src/tools.ts'
+import { MAX_UPLOAD_FILES } from '../src/uploads.ts'
+import type { ElementFacts } from '../src/visibility.ts'
+
+vi.mock('../src/tools.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/tools.ts')>()
+  return { ...actual, registerBrowserTools: vi.fn(actual.registerBrowserTools) }
+})
 
 const deny = [
   'https://mail.google.com/', 'https://inbox.google.com/', 'https://drive.google.com/', 'https://docs.google.com/',
@@ -410,3 +421,234 @@ it.skipIf(!existsSync(chromium.executablePath()))('reads employer links from eve
     rmSync(root, { force: true, recursive: true })
   }
 }, 120_000)
+
+it('refuses an upload policy whose names are not exact PDFs mapped under private/ in a canonical root', () => {
+  const log = new Context().logger
+  for (const config of [
+    { coverLetterRoot: '/jobs', uploadFiles: {} },
+    { coverLetterRoot: '/jobs', uploadFiles: { 'Resume.docx': 'private/resume.pdf' } },
+    { coverLetterRoot: '/jobs', uploadFiles: { 'Resume.pdf': 'public/resume.pdf' } },
+    { coverLetterRoot: '/jobs', uploadFiles: { 'Resume.pdf': 'private/resume.txt' } },
+    { coverLetterRoot: '/jobs', uploadFiles: { 'Resume.pdf': './private/resume.pdf' } },
+    { coverLetterRoot: 'jobs', uploadFiles: { 'Resume.pdf': 'private/resume.pdf' } },
+    { coverLetterRoot: '/jobs/../jobs', uploadFiles: { 'Resume.pdf': 'private/resume.pdf' } },
+  ] satisfies JobApplyConfig[]) {
+    expect(() => new JobApplyUploads(config, 1, log)).toThrow('jobApply requires exact PDF names mapped under private/ in its canonical root')
+  }
+})
+
+it('refuses an empty or oversized upload list, and an upload directory that is a link', async () => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'dsh-job-upload-link-'))
+  try {
+    mkdirSync(join(root, 'elsewhere'))
+    writeFileSync(join(root, 'elsewhere', 'resume.pdf'), '%PDF-1.7 synthetic')
+    symlinkSync(join(root, 'elsewhere'), join(root, 'private'))
+    const uploads = new JobApplyUploads({ coverLetterRoot: root, uploadFiles: { 'Resume.pdf': 'private/resume.pdf' } }, 1, new Context().logger)
+    await expect(uploads.resolve([])).rejects.toThrow('invalid upload count')
+    await expect(uploads.resolve(Array.from({ length: MAX_UPLOAD_FILES + 1 }, () => 'Resume.pdf'))).rejects.toThrow('invalid upload count')
+    await expect(uploads.resolve(['Resume.pdf'])).rejects.toThrow('the configured upload directory is not a canonical directory')
+  } finally { rmSync(root, { force: true, recursive: true }) }
+})
+
+/** A target whose name the job-apply guard audits. */
+function control(name: string): ElementFacts {
+  return {
+    name, value: '', href: null, formAction: null, tag: 'button', role: null,
+    display: 'inline-block', visibility: 'visible', opacity: 1, pointerEvents: 'auto', ariaHidden: false,
+    width: 120, height: 32, viewportFraction: 1, occlusion: 1, clippedBy: 0, clippingFraction: 1,
+  }
+}
+
+const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+const SNAPSHOT = 'job-snapshot:1.png'
+
+/** The run context a scoped tool receives from one Session's agent, or from no agent. */
+function execFor(session?: string): ToolRunContext {
+  return {
+    signal: new AbortController().signal,
+    ...session === undefined ? {} : { agent: { session: { id: session } } },
+  } as never
+}
+
+describe('the job-apply browser scope', () => {
+  async function mount(options: { readonly attachments?: boolean; readonly inspect?: (guard: ActionGuard) => void } = {}) {
+    const ctx = new Context()
+    const definitions = new Map<string, ToolDefinition>()
+    const restrict = vi.fn(() => () => {})
+    ctx.provide('tools', {
+      definitions: () => [{ name: 'headless_browser_cookies' }, { name: 'headless_browser_open' }, { name: 'bash' }],
+      restrict,
+      register(definition: ToolDefinition) {
+        definitions.set(definition.name, definition)
+        return () => { definitions.delete(definition.name) }
+      },
+    } as never)
+    const saved: unknown[] = []
+    if (options.attachments === true) {
+      ctx.provide('attachments', {
+        saveImage: async (image: unknown) => {
+          saved.push(image)
+          return { attachmentId: 'att-1', mediaType: 'image/png', bytes: PNG.length, width: 1, height: 1 }
+        },
+      } as never)
+    }
+    const events: SecurityEvent[] = []
+    ctx.on('headless-browser/security', (event) => { events.push(event) })
+    const infos: string[] = []
+    const warnings: string[] = []
+    const errors: unknown[] = []
+    const logger = { info: (format: string, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) },
+      warn: (format: string, ...args: unknown[]) => { warnings.push([format, ...args].map(String).join(' ')) },
+      error: (error: unknown) => { errors.push(error) }, debug: () => {} }
+    const opened: unknown[][] = []
+    const browser = {
+      currentJobHost: vi.fn(async () => 'jobs.example.test'),
+      currentJobLinkHosts: vi.fn(async () => ['www.employer.example']),
+      runJob: async (owner: string, guard: ActionGuard, operation: () => Promise<unknown>) => {
+        options.inspect?.(guard)
+        return { owner, result: await operation() }
+      },
+      jobSnapshot: (owner: string, id: string) => owner === 'worker' && id === SNAPSHOT ? PNG : undefined,
+      open: async (...args: unknown[]) => { opened.push(args); return { url: 'https://jobs.example.test/1', tab: 't1', title: 'Posting' } },
+      listTabs: async () => [],
+    }
+    const fiber = ctx.plugin({
+      inject: ['tools'],
+      apply: (scope: Context) => {
+        Object.defineProperty(scope, 'logger', { value: logger })
+        mountJobApplyBrowser(scope, Config({} as Config), { coverLetterRoot: '/jobs/clone', uploadFiles: { 'Resume.pdf': 'private/resume.pdf' } }, {
+          browser: browser as never, takeover: new TakeoverState(), credentials: {} as CredentialVault,
+        })
+      },
+    })
+    await fiber
+    const tool = (name: string): ToolDefinition => {
+      const definition = definitions.get(name)
+      if (definition === undefined) throw new Error(`the scope registered no ${name}`)
+      return definition
+    }
+    const call = async (name: string, args: unknown, session: string | null = 'worker') => await tool(name).execute(args, execFor(session ?? undefined))
+    return { ctx, fiber, definitions, restrict, events, infos, warnings, errors, opened, browser, saved, tool, call }
+  }
+
+  it('masks the inherited browser tools and registers only the supported ones, each needing an owned tab but open and tabs', async () => {
+    const { definitions, restrict, tool } = await mount()
+    expect(restrict).toHaveBeenCalledWith({ deny: ['headless_browser_cookies', 'headless_browser_open'], preserveLocal: true })
+    expect([...definitions.keys()].sort()).toEqual([
+      'headless_browser_click', 'headless_browser_close', 'headless_browser_credential', 'headless_browser_open', 'headless_browser_read',
+      'headless_browser_resume', 'headless_browser_scroll', 'headless_browser_snapshot', 'headless_browser_tabs', 'headless_browser_type',
+      'headless_browser_upload', 'read_image',
+    ])
+    expect(Object.keys(tool('headless_browser_open').parameters['properties'] as object)).toEqual(['url'])
+    expect(tool('headless_browser_open').parameters['required']).toEqual(['url'])
+    expect(tool('headless_browser_tabs').parameters['required']).toEqual([])
+    expect(tool('headless_browser_click').parameters['required']).toEqual(['tab'])
+    expect(tool('headless_browser_upload').parameters['properties']).toMatchObject({ files: { description: 'Only Resume.pdf or a cover_letters/<name>.pdf/.docx path.' } })
+  })
+
+  it('answers the verification-code tool with the caller’s current host and linked hosts', async () => {
+    const { ctx, browser } = await mount()
+    const signal = new AbortController().signal
+    const jobApply = ctx.get('jobApplyBrowser')
+    expect(await jobApply?.currentHost('worker', signal)).toBe('jobs.example.test')
+    expect(await jobApply?.linkedHosts('worker', signal)).toEqual(['www.employer.example'])
+    expect(jobApply?.registrableDomain('jobs.example.co.uk')).toBe('example.co.uk')
+    expect(browser.currentJobHost).toHaveBeenCalledWith('worker', signal)
+    expect(browser.currentJobLinkHosts).toHaveBeenCalledWith('worker', signal)
+  })
+
+  it('refuses a call without an active Session, and every call once the scope is disposed', async () => {
+    const { fiber, call } = await mount({ attachments: true })
+    expect(await call('headless_browser_tabs', {}, null)).toEqual({ error: 'job-apply browser requires an active Session' })
+    await expect(call('read_image', { file_path: SNAPSHOT }, null)).rejects.toThrow('No retained browser snapshot')
+    await fiber.dispose()
+    expect(await call('headless_browser_tabs', {})).toEqual({ error: 'job-apply browser requires an active Session' })
+    await expect(call('read_image', { file_path: SNAPSHOT })).rejects.toThrow('No retained browser snapshot')
+  })
+
+  it('refuses arguments the scoped schema does not name and selectors that chain browser engines', async () => {
+    const { call } = await mount()
+    const unsupported = { error: 'unsupported job-apply browser arguments' }
+    expect(await call('headless_browser_tabs', null)).toEqual(unsupported)
+    expect(await call('headless_browser_tabs', 'tabs')).toEqual(unsupported)
+    expect(await call('headless_browser_tabs', [])).toEqual(unsupported)
+    expect(await call('headless_browser_open', { url: 'https://jobs.example.test/', allowOrigin: true })).toEqual(unsupported)
+    const engines = { error: 'job-apply requires a single selector without internal browser engines' }
+    expect(await call('headless_browser_click', { tab: 't1', selector: 'form >> button' })).toEqual(engines)
+    expect(await call('headless_browser_upload', { tab: 't1', files: ['Resume.pdf'], trigger: 'internal:label="Resume"' })).toEqual(engines)
+    expect(await call('headless_browser_credential', { tab: 't1', action: 'fill', selector: '#password', confirmSelector: 'a >> b' })).toEqual(engines)
+  })
+
+  it('requires a non-blank owned tab id on every call but open and tabs', async () => {
+    const { call } = await mount()
+    const missing = { error: 'supply the id of an owned tab' }
+    expect(await call('headless_browser_click', { selector: 42 })).toEqual(missing)
+    expect(await call('headless_browser_read', { tab: 7 })).toEqual(missing)
+    expect(await call('headless_browser_read', { tab: '  ' })).toEqual(missing)
+  })
+
+  it('refuses to open a denied URL before the browser sees it, naming only its host', async () => {
+    const { call, opened, warnings } = await mount()
+    expect(await call('headless_browser_open', { url: 'https://mail.google.com/mail/u/0/#inbox' })).toEqual({ error: 'navigation_refused: mail.google.com' })
+    expect(opened).toEqual([])
+    expect(warnings).toEqual(['headless-browser: %s navigation_refused: mail.google.com'])
+  })
+
+  it('opens every page in a new tab under a job-apply guard that audits the application actions it allows', async () => {
+    const url = 'https://jobs.example.test/apply'
+    const { call, opened, events, infos } = await mount({
+      inspect: (guard) => {
+        guard.decideTarget({ action: 'click', url, ref: '#submit', candidates: [control('Submit your application')], allowOrigin: false })
+        guard.decideTarget({ action: 'click', url, ref: '#fee', candidates: [control('Pay $25 application fee')], allowOrigin: false })
+      },
+    })
+    expect(await call('headless_browser_open', { url })).toEqual({
+      owner: 'worker', result: expect.objectContaining({ url: 'https://jobs.example.test/1', tab: 't1' }) as object,
+    })
+    expect(opened).toEqual([[url, true, false, undefined, 'worker']])
+    expect(events.map(event => [event.kind, event.rule])).toEqual([['allow', 'sensitive-name'], ['refusal', 'sensitive']])
+    expect(infos).toEqual(['headless-browser: authorized application action %s on %s click jobs.example.test'])
+    expect(await call('headless_browser_tabs', {})).toEqual({ owner: 'worker', result: { tabs: [] } })
+  })
+
+  it('shows a Session its own retained snapshot as an attachment marked untrusted, and nothing else', async () => {
+    const { call, saved, tool } = await mount({ attachments: true })
+    const image = { attachmentId: 'att-1', mediaType: 'image/png', bytes: PNG.length, width: 1, height: 1 }
+    expect(await call('read_image', { file_path: SNAPSHOT })).toEqual({ path: SNAPSHOT, image })
+    expect(tool('read_image').output.render({ file_path: SNAPSHOT }, { path: SNAPSHOT, image })).toEqual([
+      { type: 'text', text: `Untrusted browser screenshot (${SNAPSHOT})` },
+      { type: 'image', attachment: image },
+    ])
+    expect(saved).toEqual([{ data: PNG, mediaType: 'image/png', name: 'job-snapshot.png' }])
+    await expect(call('read_image', { file_path: SNAPSHOT }, 'other')).rejects.toThrow('No retained browser snapshot with that identifier belongs to this Session.')
+  })
+
+  it('needs the attachment service to show a snapshot', async () => {
+    const { call } = await mount()
+    await expect(call('read_image', { file_path: SNAPSHOT })).rejects.toThrow('Snapshot viewing requires the attachment service.')
+  })
+
+  it('gives the browser tools no keepalive service and no takeover page', async () => {
+    vi.mocked(registerBrowserTools).mockClear()
+    await mount()
+    const deps: ToolDeps | undefined = vi.mocked(registerBrowserTools).mock.calls[0]?.[1]
+    expect(() => deps?.keepalives).toThrow('keepalives are disabled for job applications')
+    expect(() => deps?.pageUrl()).toThrow('browser takeover is disabled for job applications')
+  })
+
+  it('fails the mount on a browser tool whose parameters name no properties', async () => {
+    vi.mocked(registerBrowserTools).mockImplementationOnce((ctx, _deps, register) => {
+      register?.(ctx, { ...tabsLike(), parameters: { type: 'object' } })
+    })
+    await expect(mount()).rejects.toThrow('browser tool has no object properties')
+  })
+})
+
+/** A browser tool definition the scope supports, for a registration it must refuse. */
+function tabsLike(): ToolDefinition {
+  return {
+    name: 'headless_browser_tabs', description: 'List tabs', parameters: { type: 'object', properties: {} },
+    output: { schema: { type: 'object' }, render: () => [] },
+    execute: async () => ({ tabs: [] }),
+  }
+}

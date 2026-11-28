@@ -390,8 +390,8 @@ export class HeadlessBrowserSession {
   readonly #jobTabUse = new Map<string, number>()
   /** When each job-apply Session, by owner, last started or finished a browser call. */
   readonly #jobOwnerUse = new Map<string, number>()
-  /** Browser calls each job-apply Session has in flight. */
-  readonly #jobInFlight = new Map<string, number>()
+  /** The owner of each job-apply browser call in flight, once per call. */
+  readonly #jobInFlight: string[] = []
   readonly #jobSnapshots = new JobSnapshots()
   #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
@@ -533,13 +533,11 @@ export class HeadlessBrowserSession {
   async runJob<T>(session: string, guard: ActionGuard, run: () => Promise<T>): Promise<T> {
     const owner = JOB_OWNER_PREFIX + session
     this.#jobOwnerUse.set(owner, this.#now())
-    this.#jobInFlight.set(owner, (this.#jobInFlight.get(owner) ?? 0) + 1)
+    this.#jobInFlight.push(owner)
     try {
       return await this.#job.run({ owner, guard }, run)
     } finally {
-      const left = (this.#jobInFlight.get(owner) ?? 1) - 1
-      if (left === 0) this.#jobInFlight.delete(owner)
-      else this.#jobInFlight.set(owner, left)
+      this.#jobInFlight.splice(this.#jobInFlight.indexOf(owner), 1)
       this.#jobOwnerUse.set(owner, this.#now())
     }
   }
@@ -554,7 +552,7 @@ export class HeadlessBrowserSession {
    * unseen since this process started (a restart ends every turn) counts as idle.
    */
   #jobOwnerIdle(owner: string | null | undefined): boolean {
-    if (owner?.startsWith(JOB_OWNER_PREFIX) !== true || (this.#jobInFlight.get(owner) ?? 0) > 0) return false
+    if (owner?.startsWith(JOB_OWNER_PREFIX) !== true || this.#jobInFlight.includes(owner)) return false
     const used = this.#jobOwnerUse.get(owner)
     return used === undefined || this.#now() - used >= (this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS)
   }
@@ -592,13 +590,13 @@ export class HeadlessBrowserSession {
    */
   async currentJobLinkHosts(session: string, signal?: AbortSignal): Promise<string[]> {
     signal?.throwIfAborted()
-    const pages = await this.#currentJobSitePages(session)
+    const { host: site, pages } = await this.#currentJobSitePages(session)
     const hosts = new Set<string>()
     for (const page of pages) {
       if (signal?.aborted === true) break
       for (const host of await linkHosts(page)) hosts.add(host)
     }
-    if (pages.length > 1) this.#log.info('headless-browser: read links of %d tabs on %s for a job-apply Session', pages.length, safeHost(pages[0]?.url() ?? ''))
+    if (pages.length > 1) this.#log.info('headless-browser: read links of %d tabs on %s for a job-apply Session', pages.length, site)
     return [...hosts]
   }
 
@@ -614,19 +612,20 @@ export class HeadlessBrowserSession {
 
   /**
    * @param session - trusted identity of the calling Session.
-   * @returns the caller's current page, then its other live, admitted pages on the same host.
+   * @returns the host of the caller's current page, and that page followed by its other live, admitted pages on the
+   *   same host; no pages when the caller has no current page.
    */
-  async #currentJobSitePages(session: string): Promise<Page[]> {
+  async #currentJobSitePages(session: string): Promise<{ readonly host: string; readonly pages: readonly Page[] }> {
     const [current, ...rest] = this.#ownedJobTabs(session)
     const page = current === undefined ? null : await this.#admittedJobPage(current)
-    if (page === null) return []
+    if (page === null) return { host: '', pages: [] }
     const host = safeHost(page.url())
     const pages = [page]
     for (const tab of rest) {
       const other = await this.#admittedJobPage(tab)
       if (other !== null && safeHost(other.url()) === host) pages.push(other)
     }
-    return pages
+    return { host, pages }
   }
 
   /**
@@ -639,8 +638,16 @@ export class HeadlessBrowserSession {
     const owner = JOB_OWNER_PREFIX + session
     return this.tabsState()
       .filter(entry => tabs.owner(entry.id) === owner)
-      .sort((a, b) => (this.#jobTabUse.get(b.id) ?? 0) - (this.#jobTabUse.get(a.id) ?? 0) || Number(b.active) - Number(a.active))
+      .sort((a, b) => this.#jobTabUsedAt(b.id) - this.#jobTabUsedAt(a.id) || Number(b.active) - Number(a.active))
       .map(entry => entry.id)
+  }
+
+  /**
+   * @param tab - a tab id.
+   * @returns when a job-apply call last used the tab, or 0 when none has.
+   */
+  #jobTabUsedAt(tab: string): number {
+    return this.#jobTabUse.get(tab) ?? 0
   }
 
   /**
@@ -711,7 +718,7 @@ export class HeadlessBrowserSession {
     for (const id of this.#jobTabUse.keys()) if (!live.has(id)) this.#jobTabUse.delete(id)
     if (open.length < MAX_TABS) return false
     const rows: SlotRow[] = open
-      .map(tab => ({ id: tab.id, url: tab.url, owner: tabs.owner(tab.id), used: this.#jobTabUse.get(tab.id) ?? 0 }))
+      .map(tab => ({ id: tab.id, url: tab.url, owner: tabs.owner(tab.id), used: this.#jobTabUsedAt(tab.id) }))
       .sort((a, b) => a.used - b.used)
     const blank = rows.find(tab => tab.owner === null && tab.url === 'about:blank')
     const idle = rows.find(tab => tab.owner !== caller && this.#jobOwnerIdle(tab.owner))
@@ -735,9 +742,9 @@ export class HeadlessBrowserSession {
    */
   async #staleJobTab(rows: readonly SlotRow[]): Promise<SlotRow | undefined> {
     const tabs = this.tabs()
-    const jobRows = rows.filter(row => row.owner?.startsWith(JOB_OWNER_PREFIX) === true)
+    const jobRows = rows.filter((row): row is SlotRow & { readonly owner: string } => row.owner?.startsWith(JOB_OWNER_PREFIX) === true)
     const current = new Map<string, SlotRow>()
-    for (const row of jobRows) if (row.owner !== null && row.owner !== undefined) current.set(row.owner, row)
+    for (const row of jobRows) current.set(row.owner, row)
     const openers = new Set<Page>()
     for (const row of rows) {
       const opener = await (await tabs.page(row.id)).opener()
@@ -745,7 +752,7 @@ export class HeadlessBrowserSession {
     }
     const before = this.#now() - (this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS)
     for (const row of jobRows) {
-      if (row.used > before || current.get(row.owner ?? '') === row) continue
+      if (row.used > before || current.get(row.owner) === row) continue
       if (!openers.has(await tabs.page(row.id))) return row
     }
     return undefined

@@ -356,6 +356,13 @@ describe('what a click at the element reaches', () => {
     expect(probeElement(button)).toMatchObject({ occlusion: 0, coveredBy: 'div' })
   })
 
+  it('names the root element itself as the cover, with no parent to name', () => {
+    mount('<button id="go">Go</button>')
+    const box: Box = { left: 0, top: 0, width: 200, height: 40 }
+    layout.place(find('#go'), box).place(document.documentElement, box).paint(document.documentElement, find('#go'))
+    expect(probeElement(find('#go'))).toMatchObject({ occlusion: 0, coveredBy: 'html "Go"', markup: '<button id="go"> in <body>; under <html>' })
+  })
+
   it('counts a point on the element\'s own child as a hit and a point on nothing as a miss', () => {
     mount('<a id="job" href="/jobs/7"><span id="title">Engineer</span></a>')
     const title = find('#title')
@@ -407,6 +414,43 @@ describe('what a click at the element reaches', () => {
     expect(probeElement(agree)).toMatchObject({ name: 'I agree', occlusion: 1 })
     layout.place(find('#cover'), box).paint(find('#cover'), agree, host)
     expect(probeElement(agree)).toMatchObject({ occlusion: 0, coveredBy: 'div#cover' })
+  })
+})
+
+describe('a label under the transparent input it labels', () => {
+  /** Eightfold's radios: the label's text lies under its own input, which a click there reaches. */
+  function underInput(input: Box): { label: Element; radio: Element } {
+    mount('<label id="yes" for="radio">Yes, I am authorized</label><input type="radio" id="radio" name="authorized" style="opacity:0">')
+    const label = find('#yes')
+    const radio = find('#radio')
+    layout.place(label, { left: 0, top: 0, width: 200, height: 20 }).place(radio, input).paint(radio, label)
+    return { label, radio }
+  }
+
+  it('counts a click on its own input as reaching the label, and aims at the nearest point where its text is on top', () => {
+    const { label } = underInput({ left: 80, top: 0, width: 40, height: 20 })
+    // The centre (100, 10) lands on the input; 0.65 across (x 130) is the first sample past its right edge.
+    expect(probeElement(label)).toMatchObject({ occlusion: 1, labelAim: { x: 130, y: 10 } })
+  })
+
+  it('names no aim when the input covers the whole label', () => {
+    const { label } = underInput({ left: 0, top: 0, width: 200, height: 20 })
+    const facts = probeElement(label)
+    expect(facts.occlusion).toBe(1)
+    expect(facts.labelAim).toBeUndefined()
+  })
+
+  it('aims at the input’s own point when the input sits inside the label', () => {
+    mount('<label id="no"><input type="radio" id="radio" style="opacity:0"><span>No</span></label>')
+    const label = find('#no')
+    const radio = find('#radio')
+    layout
+      .place(label, { left: 0, top: 0, width: 200, height: 20 })
+      .place(radio, { left: 80, top: 0, width: 40, height: 20 })
+      .paint(radio, label)
+    const aim = probeElement(label).labelAim
+    expect(aim?.x).toBeCloseTo(110)
+    expect(aim?.y).toBe(10)
   })
 })
 
@@ -543,6 +587,15 @@ describe('a searchable dropdown', () => {
     expect(scoreVisibility(readElementFacts(facts)).factors.opacity).toBe(1)
   })
 
+  it('looks past a hidden value input in the same box, and skips an ancestor whose opacity the browser does not report', () => {
+    mount('<div id="control"><div id="sizer"><input id="country" role="combobox" style="opacity:0"><input type="hidden" name="country"></div></div>')
+    layout
+      .place(find('#country'), { left: 100, top: 100, width: 2, height: 20 })
+      .place(find('#sizer'), { left: 90, top: 95, width: 200, height: 30 })
+      .unreported(find('#control'))
+    expect(probeElement(find('#country')).opacity).toBe(1)
+  })
+
   it('keeps a transparent combobox input transparent in a faded control or in a box with another control', () => {
     const faded = selectBox()
     find('#control').setAttribute('style', 'opacity:0')
@@ -614,6 +667,11 @@ describe('the element that holds text the page marks aria-hidden', () => {
     expect(findHiddenTextHolder(find('#hidden'))).toBe(find('#title'))
   })
 
+  it('compares the label an element and its holder carry when they have one', () => {
+    mount('<div role="button"><p id="holder" aria-label="Follow  Acme"><span id="star" aria-hidden="true" aria-label="Follow Acme">★</span></p></div>')
+    expect(findHiddenTextHolder(find('#star'))).toBe(find('#holder'))
+  })
+
   it('refuses hidden text inside other text, beside another control, inside a hidden subtree, or without a name', () => {
     mount('<p><span id="phrase" aria-hidden="true">Apply now</span> to this role</p>'
       + '<div><span id="beside" aria-hidden="true">Delete</span><button>Delete</button></div>'
@@ -681,6 +739,53 @@ describe('the box that stands in for a checkbox or radio the page hides', () => 
     layout.place(find('#resume'), { left: 0, top: 0, width: 16, height: 16 }).place(find('#name'), { left: 20, top: 0, width: 200, height: 20 })
     expect(findToggleStandIn(find('#name'))).toBeNull()
     expect(findToggleAim(find('#resume'))).toBeNull()
+  })
+
+  it('finds nothing in a document without a window, for a label without a control, or for a box with no name', () => {
+    const detached = document.implementation.createHTMLDocument('detached')
+    detached.body.innerHTML = '<input type="checkbox" id="away" aria-label="Away">'
+    const away = detached.querySelector('#away')
+    if (away === null) throw new Error('the detached document has no #away')
+    mount('<label id="orphan">Orphan</label><input type="checkbox" id="nameless"><input id="text" aria-label="Text">')
+    for (const target of [away, find('#orphan'), find('#nameless'), find('#text')]) {
+      expect(findToggleStandIn(target)).toBeNull()
+      expect(findToggleAim(target)).toBeNull()
+    }
+  })
+
+  it('takes a painted label under an ancestor whose opacity the browser does not report', () => {
+    mount('<input type="radio" id="resume" name="resume"><label id="name" for="resume">Shuyu_Li_Resume.pdf</label>')
+    layout.place(find('#name'), { left: 0, top: 0, width: 200, height: 20 }).unreported(document.body)
+    expect(findToggleStandIn(find('#resume'))).toBe(find('#name'))
+  })
+
+  it('finds the row by the box’s own name when the page replaced its labels list', () => {
+    mount('<div id="row"><input type="checkbox" id="follow" aria-label="Follow Acme"><span>Follow Acme</span></div>')
+    Object.defineProperty(find('#follow'), 'labels', { value: null })
+    layout.place(find('#row'), { left: 0, top: 0, width: 400, height: 24 })
+    expect(findToggleStandIn(find('#follow'))).toBe(find('#row'))
+    expect(findToggleAim(find('#follow'))).toBeNull()
+  })
+
+  it('aims at the box through a click-through label under an ancestor whose opacity the browser does not report', () => {
+    clickThroughLabel()
+    layout.paint(find('#text'), find('#confirm')).unreported(find('#label'))
+    expect(findToggleAim(find('#confirm'))).toEqual({ x: 8, y: 8 })
+  })
+
+  it('names no aim when nothing, the box itself, or something outside its label is drawn over the box', () => {
+    clickThroughLabel()
+    const unplaced = document.createElement('label')
+    unplaced.htmlFor = 'confirm'
+    document.body.append(unplaced)
+    layout.paint()
+    expect(findToggleAim(find('#confirm'))).toBeNull()
+    layout.paint(find('#confirm'), find('#text'))
+    expect(findToggleAim(find('#confirm'))).toBeNull()
+    const banner = document.createElement('div')
+    document.body.append(banner)
+    layout.place(banner, { left: 0, top: 0, width: 400, height: 40 }).paint(banner, find('#text'), find('#confirm'))
+    expect(findToggleAim(find('#confirm'))).toBeNull()
   })
 })
 

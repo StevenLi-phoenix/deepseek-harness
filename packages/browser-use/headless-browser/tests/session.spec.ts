@@ -21,6 +21,7 @@ import type { Config } from '../src/config.ts'
 import { DOWNLOAD_START_WAIT_MS } from '../src/downloads.ts'
 import { ActionGuard, ActionRefusedError, type Decision, type TargetDecisionInput } from '../src/guard.ts'
 import { OWNER_FILE, type ProfileProbe, type ProfileProcess } from '../src/profile.ts'
+import { DEFAULT_MISS_ADVICE } from '../src/near-miss.ts'
 import { SelectorMissError } from '../src/read.ts'
 import {
   BrowserUnavailableError,
@@ -135,9 +136,10 @@ interface FakeFrameSpec {
   readonly faults?: LocatorFaults
 }
 
-/** A file chooser the next trigger click opens, and the files it received. */
+/** A file chooser the next trigger click opens, the input behind it, and the files it received. */
 interface FakeChooser {
   readonly multiple: boolean
+  readonly input?: Element
   files?: readonly string[]
 }
 
@@ -170,13 +172,39 @@ class FakePage {
   readonly typed: string[] = []
   readonly filled = new Map<Element, string>()
   readonly attached = new Map<Element, readonly string[]>()
+  /** The address an element handle's frame reports; the page's own when unset, none when `null`. */
+  ownerFrameUrl: string | null | undefined
+  /** Called when a locator pins its element to a handle, as a page script that changes the element in between would. */
+  onPin: ((node: Element) => void) | undefined
+  /** Called while a screenshot is taken. */
+  onScreenshot: (() => void) | undefined
+  /** Set to make every close reject, as a page of a browser that went away does. */
+  closeFailure: string | undefined
+  /** Markup a selector wait finds appended to the body, as a step that draws late; without it a wait times out. */
+  lateMarkup: string | undefined
+  /** Set to detach what a selector wait found before the wait returns, as a step that redraws at once does. */
+  lateDetaches = false
+  /** The `document.documentURI` the page reports; jsdom's own when unset. */
+  documentURI: string | undefined
+  /** How the main frame's control count fails for the resume probe: its frame detached, or it is still attached. */
+  countFailure: 'detached' | 'attached' | undefined
+  /** The page whose script opened this one. */
+  openerPage: Page | null = null
+  reloads = 0
   readonly #listeners = new Map<string, Set<(...args: never[]) => void>>()
   readonly #context: FakeContext
+  readonly #main: Frame
   readonly page: Page
 
   constructor(context: FakeContext) {
     this.#context = context
+    this.#main = this.#mainFrame()
     this.page = this.#playwrightPage()
+  }
+
+  /** Fire one page event with its payload, as Playwright does for `popup`, `request`, and `response`. */
+  fire(event: string, payload: unknown): void {
+    for (const listener of [...this.#listeners.get(event) ?? []]) (listener as (payload: unknown) => void)(payload)
   }
 
   /** Answer one element function: the probe from the set facts, everything else by running it. */
@@ -205,6 +233,11 @@ class FakePage {
       fill: async (value: string): Promise<void> => { this.filled.set(node, value) },
       press: async (key: string): Promise<void> => { this.pressed.push(`${node.id}:${key}`) },
       focus: async (): Promise<void> => { this.focused.push(node) },
+      ownerFrame: async (): Promise<Frame | null> => {
+        const url = this.ownerFrameUrl === undefined ? this.address : this.ownerFrameUrl
+        return url === null ? null : { url: (): string => url } as Partial<Frame> as Frame
+      },
+      dispose: async (): Promise<void> => {},
     } as Partial<ElementHandle<Element>> as ElementHandle<Element>
   }
 
@@ -230,7 +263,36 @@ class FakePage {
       focus: async (): Promise<void> => { this.focused.push(only()) },
       setInputFiles: async (files: readonly string[]): Promise<void> => { this.attached.set(only(), files) },
       innerText: async (): Promise<string> => only().textContent,
+      elementHandle: async (): Promise<ElementHandle<Element>> => {
+        const node = only()
+        this.onPin?.(node)
+        return this.elementHandle(node)
+      },
+      waitFor: async (): Promise<void> => {
+        const late = this.lateMarkup
+        this.lateMarkup = undefined
+        if (late !== undefined) document.body.insertAdjacentHTML('beforeend', late)
+        const found = nodes()
+        if (this.lateDetaches) for (const node of found) node.remove()
+        if (found.length === 0) throw new Error('locator.waitFor: Timeout 2500ms exceeded.')
+      },
     } as Partial<Locator> as Locator
+  }
+
+  #mainFrame(): Frame {
+    const frame = {
+      url: (): string => this.address,
+      parentFrame: (): null => null,
+      childFrames: (): Frame[] => this.frames.map(spec => this.#frame(spec)),
+      isDetached: (): boolean => this.countFailure === 'detached',
+      locator: (selector: string): Locator => {
+        const failure = this.countFailure
+        const locator = this.locator(() => [...document.querySelectorAll(selector)])
+        if (failure === undefined) return locator
+        return { ...locator, count: async (): Promise<number> => { throw new Error('frame.locator: Frame was detached') } }
+      },
+    }
+    return frame as Partial<Frame> as Frame
   }
 
   #jsHandle(value: Element | null): JSHandle {
@@ -247,8 +309,8 @@ class FakePage {
     return this.#jsHandle(this.covers.get(node) ?? null)
   }
 
-  #emit(event: string): void {
-    for (const listener of [...this.#listeners.get(event) ?? []]) listener()
+  #emit(event: string, ...payload: never[]): void {
+    for (const listener of [...this.#listeners.get(event) ?? []]) listener(...payload)
   }
 
   #frame(spec: FakeFrameSpec): Frame {
@@ -280,6 +342,7 @@ class FakePage {
       type: async (text: string): Promise<void> => { this.typed.push(text) },
     } as Partial<Keyboard> as Keyboard
     const chooserOf = (): FakeChooser | undefined => this.chooser
+    const handleOf = (node: Element): ElementHandle<Element> => this.elementHandle(node)
     // Playwright overloads waitForEvent per event; the fake answers the file chooser and refuses every other event.
     function waitForEvent(event: 'filechooser'): Promise<FileChooser>
     function waitForEvent(event: string): Promise<never>
@@ -288,6 +351,7 @@ class FakePage {
       if (event !== 'filechooser' || chooser === undefined) throw new Error(`page.waitForEvent: Timeout waiting for ${event}`)
       return {
         isMultiple: (): boolean => chooser.multiple,
+        element: (): ElementHandle<Element> => handleOf(chooser.input ?? document.body),
         setFiles: async (files: readonly string[]): Promise<void> => { chooser.files = files },
       } as Partial<FileChooser> as FileChooser
     }
@@ -298,7 +362,12 @@ class FakePage {
       goto: async (url: string): Promise<null> => {
         if (this.gotoFailure !== undefined) throw new Error(this.gotoFailure)
         this.address = url
-        this.#emit('framenavigated')
+        this.#emit('framenavigated', this.#main as never)
+        this.#emit('load')
+        return null
+      },
+      reload: async (): Promise<null> => {
+        this.reloads += 1
         this.#emit('load')
         return null
       },
@@ -306,6 +375,7 @@ class FakePage {
         if (this.failFront) throw new Error('page.bringToFront: Target closed')
       },
       close: async (): Promise<void> => {
+        if (this.closeFailure !== undefined) throw new Error(this.closeFailure)
         this.closed = true
         this.#emit('close')
       },
@@ -320,6 +390,7 @@ class FakePage {
         return this.page
       },
       evaluate: async (fn: InPage, arg?: unknown): Promise<unknown> => {
+        if (fn === 'document.documentURI') return this.documentURI ?? document.documentURI
         if (typeof fn === 'string') throw new Error('the fake page runs functions, not source text')
         return await fn(arg)
       },
@@ -329,7 +400,14 @@ class FakePage {
         return this.#jsHandle(value instanceof Element ? value : null)
       },
       locator: (selector: string): Locator => this.locator(() => [...document.querySelectorAll(selector)]),
-      mainFrame: (): Frame => ({ childFrames: (): Frame[] => this.frames.map(spec => this.#frame(spec)) }) as Partial<Frame> as Frame,
+      mainFrame: (): Frame => this.#main,
+      frames: (): Frame[] => [this.#main],
+      routeWebSocket: async (): Promise<void> => {},
+      screenshot: async (): Promise<Buffer> => {
+        this.onScreenshot?.()
+        return Buffer.from('png')
+      },
+      opener: async (): Promise<Page | null> => this.openerPage,
       mouse,
       keyboard,
       context: (): BrowserContext => this.#context.context,
@@ -351,6 +429,10 @@ class FakeContext {
   closed = false
   /** Every CDP command the session sent, with its parameters. */
   readonly sent: [string, unknown][] = []
+  /** The `Fetch.requestPaused` listener of each guarded job page, in guarding order. */
+  readonly paused: ((event: unknown) => void)[] = []
+  /** Set to make the next page creation's first navigation reject with this message. */
+  nextGotoFailure: string | undefined
   readonly #listeners = new Map<string, Set<(...args: never[]) => void>>()
   readonly context: BrowserContext
 
@@ -362,7 +444,12 @@ class FakeContext {
         if (method === 'Page.getLayoutMetrics') {
           return { cssVisualViewport: { pageX: 0, pageY: 0, clientHeight: 800 }, cssContentSize: { height: 800 } }
         }
+        if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'main' } } }
         return {}
+      },
+      on: (_event: string, listener: (event: unknown) => void): CDPSession => {
+        this.paused.push(listener)
+        return cdp
       },
     } as Partial<CDPSession> as CDPSession
     this.context = {
@@ -381,6 +468,8 @@ class FakeContext {
         const failure = this.newPageFailures.shift()
         if (failure !== undefined) throw new Error(failure)
         const page = new FakePage(this)
+        page.gotoFailure = this.nextGotoFailure
+        this.nextGotoFailure = undefined
         this.created.push(page)
         return page.page
       },
@@ -1066,6 +1155,336 @@ describe('reading embedded pages', () => {
     const { session } = await withTab()
     removeBody()
     expect((await session.read({})).text).toBe('')
+    await session.close()
+  })
+})
+
+describe('one failed launch with two callers waiting', () => {
+  it('fails both callers, and the next call launches again', async () => {
+    const { session, contexts } = harness({ launches: ['browserType.launchPersistentContext: spawn ENOENT'] })
+    const [first, second] = await Promise.allSettled([session.ensure(), session.ensure()])
+    expect([first?.status, second?.status]).toEqual(['rejected', 'rejected'])
+    await session.ensure()
+    expect(contexts).toHaveLength(1)
+    await session.close()
+  })
+})
+
+describe('a trigger that names the file input itself', () => {
+  it('takes the files the way a selector-named input does, refusing an index past the inputs and several files for one input', async () => {
+    document.body.innerHTML = '<input type="file" id="one"><input type="file" id="many" multiple>'
+    const { session, page } = await withTab()
+    const files = ['/tmp/a.pdf', '/tmp/b.pdf']
+    const trigger = { selector: 'input[type=file]' }
+    await expect(session.attachFiles({ trigger, index: 5 }, files)).rejects.toThrow('input[type=file] matches 2 file input(s); index 5 is out of range')
+    await expect(session.attachFiles({ trigger }, files)).rejects.toThrow('input[type=file] takes one file; attach the files one call each')
+    expect(await session.attachFiles({ trigger, index: 1 }, files)).toEqual({ url: 'about:blank', ref: 'input[type=file]', inputs: 2 })
+    expect(page.attached.get(element('#many'))).toEqual(files)
+    await session.close()
+  })
+})
+
+describe('a selector that matches late', () => {
+  it('reads and acts on an element that attaches within the settle wait', async () => {
+    document.body.innerHTML = '<p>Loading</p>'
+    const { session, page } = await withTab()
+    page.lateMarkup = '<p id="late">Continue to step 2</p>'
+    expect((await session.read({ selector: '#late' })).text).toBe('Continue to step 2')
+    document.body.innerHTML = '<p>Loading</p>'
+    page.lateMarkup = '<button id="next">Next</button>'
+    await session.click({ selector: '#next' })
+    expect(page.clicked).toEqual([element('#next')])
+    expect(LOG.info).toHaveBeenCalledWith('headless-browser: %s appeared on %s within the settle wait', '#next', expect.any(String) as string)
+    await session.close()
+  })
+
+  it('reports a miss for an element that attached within the wait and was gone before the action', async () => {
+    document.body.innerHTML = '<p>Loading</p>'
+    const { session, page } = await withTab()
+    page.lateMarkup = '<button id="next">Next</button>'
+    page.lateDetaches = true
+    await expect(session.click({ selector: '#next' })).rejects.toBeInstanceOf(SelectorMissError)
+    expect(page.clicked).toEqual([])
+    await session.close()
+  })
+
+  it('keeps the plain advice when looking for what a miss meant fails', async () => {
+    document.body.innerHTML = '<p>Loading</p>'
+    const { session } = await withTab()
+    stub(document.body, 'querySelectorAll', () => { throw new Error('the page navigated') })
+    await expect(session.click({ selector: 'button[aria-label="Apply"]' })).rejects.toThrow(DEFAULT_MISS_ADVICE)
+    expect(LOG.debug).toHaveBeenCalledWith('headless-browser: looking for what %s meant failed: %s', 'button[aria-label="Apply"]', 'the page navigated')
+    await session.close()
+  })
+})
+
+describe('resuming a tab', () => {
+  /** A main-frame request the page reports, as Playwright's `request` event carries it. */
+  function navigation(page: FakePage, method: string, frame: () => Frame = () => page.page.mainFrame()) {
+    return { isNavigationRequest: () => true, frame, method: () => method }
+  }
+
+  it('reloads a Chromium error page only after a GET navigation of the main frame', async () => {
+    const { session, page } = await withTab({}, 'https://jobs.example.com/apply')
+    page.fire('request', { isNavigationRequest: () => false, method: () => 'GET' })
+    page.fire('request', navigation(page, 'GET', () => { throw new Error('the request has no frame yet') }))
+    page.address = 'chrome-error://chromewebdata/'
+    expect(await session.resumeTab({ tab: 't1' })).toMatchObject({ tab: 't1', hasForm: false })
+    expect(page.reloads).toBe(0)
+    page.fire('request', navigation(page, 'GET'))
+    page.address = 'https://jobs.example.com/apply'
+    page.documentURI = 'chrome-error://chromewebdata/'
+    expect(await session.resumeTab({ tab: 't1' })).toMatchObject({ hasForm: false })
+    expect(page.reloads).toBe(1)
+    await session.close()
+  })
+
+  it('counts a frame that detached while it was read as holding no form, and reports a frame that failed while attached', async () => {
+    document.body.innerHTML = '<input id="email">'
+    const { session, page } = await withTab({}, 'https://jobs.example.com/apply')
+    page.countFailure = 'detached'
+    expect(await session.resumeTab({ tab: 't1' })).toMatchObject({ hasForm: false })
+    page.countFailure = 'attached'
+    await expect(session.resumeTab({ tab: 't1' })).rejects.toThrow('frame.locator: Frame was detached')
+    page.countFailure = undefined
+    expect(await session.resumeTab({ tab: 't1' })).toMatchObject({ hasForm: true })
+    await session.close()
+  })
+})
+
+/** Run one call as a job-apply Session, under the guard the job-apply scope gives it unless another is named. */
+async function asJob<T>(session: HeadlessBrowserSession, run: () => Promise<T>, worker = 'w', guard = new ActionGuard({ sensitivePolicy: 'job-apply' })): Promise<T> {
+  return await session.runJob(worker, guard, run)
+}
+
+/** A session with one job-apply tab open on a careers page, and that tab's fake page. */
+async function withJobTab(url = 'https://jobs.example.com/apply', options: HarnessOptions = {}) {
+  const state = harness(options)
+  const opened = await asJob(state.session, async () => await state.session.open(url, true))
+  const [context] = state.contexts
+  const page = context?.created.at(-1)
+  if (context === undefined || page === undefined) throw new Error('the session opened no job tab')
+  return Object.assign(state, { context, page, tab: opened.tab })
+}
+
+describe('job-apply calls over the fake page', () => {
+  it('names no current host or links before the browser has a tab', async () => {
+    const { session } = harness()
+    expect(await session.currentJobHost('w')).toBeNull()
+    expect(await session.currentJobLinkHosts('w')).toEqual([])
+    await session.close()
+  })
+
+  it('reads the employer hosts a page links to, and none from a page whose read fails', async () => {
+    document.body.innerHTML = '<a href="https://www.employer.example/about">About</a><a href="mailto:jobs@employer.example">Mail</a>'
+    const { session, page } = await withJobTab()
+    expect(await session.currentJobHost('w')).toBe('jobs.example.com')
+    expect(await session.currentJobLinkHosts('w')).toEqual(['www.employer.example'])
+    stub(page.page, 'evaluate', async () => { throw new Error('Execution context was destroyed') })
+    expect(await session.currentJobLinkHosts('w')).toEqual([])
+    await session.close()
+  })
+
+  it('reads no links from a page that does not answer in time', async () => {
+    const { session, page } = await withJobTab()
+    stub(page.page, 'evaluate', async () => await new Promise<never>(() => {}))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const reading = session.currentJobLinkHosts('w')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(await reading).toEqual([])
+    vi.useRealTimers()
+    await session.close()
+  })
+
+  it('stops reading links once the request is cancelled, and names no host for a tab on a denied page', async () => {
+    const { session, context } = await withJobTab()
+    await asJob(session, async () => await session.open('https://jobs.example.com/posting', true))
+    const controller = new AbortController()
+    let reads = 0
+    const read = async (): Promise<string[]> => { reads += 1; controller.abort(); return ['https://www.employer.example/'] }
+    for (const fake of context.created) stub(fake.page, 'evaluate', read)
+    expect(await session.currentJobLinkHosts('w', controller.signal)).toEqual(['www.employer.example'])
+    expect(reads).toBe(1)
+    for (const fake of context.created) fake.address = 'https://mail.google.com/mail/u/0'
+    expect(await session.currentJobHost('w')).toBeNull()
+    await session.close()
+  })
+
+  it('logs a refused subresource once per host, and closes the tab for a refused main-frame load', async () => {
+    const { session, context, tab } = await withJobTab()
+    const paused = context.paused.at(-1)
+    const request = (requestId: string, url: string, resourceType = 'XHR') => ({ requestId, request: { url }, resourceType, frameId: 'main' })
+    paused?.(request('r1', 'https://api.github.com/user'))
+    paused?.(request('r2', 'https://api.github.com/repos'))
+    await vi.waitFor(() => { expect(context.sent.filter(([method]) => method === 'Fetch.failRequest')).toHaveLength(2) })
+    expect(LOG.warn.mock.calls.filter(([, message]) => message === 'navigation_refused: api.github.com')).toHaveLength(1)
+    paused?.(request('r3', 'https://mail.google.com/mail', 'Document'))
+    await vi.waitFor(() => { expect(session.tabsState().map(entry => entry.id)).not.toContain(tab) })
+    expect(LOG.warn.mock.calls.filter(([, message]) => message === 'navigation_refused: mail.google.com')).toHaveLength(1)
+    await session.close()
+  })
+
+  it('needs a tab id, a tab this Session may use, and a guarded page for every call', async () => {
+    const { session, tab } = await withJobTab()
+    await expect(asJob(session, async () => await session.read({}))).rejects.toThrow('the tab is not owned by this job-apply Session; name one of its tabs')
+    const plain = await session.open('https://jobs.example.com/other', true)
+    session.tabs().setOwner(plain.tab, 'job-apply:w')
+    await expect(asJob(session, async () => await session.read({}, plain.tab))).rejects.toThrow('no protected job-apply tab is open')
+    expect((await asJob(session, async () => await session.read({}, tab))).text).toBe('')
+    await session.close()
+  })
+
+  it('resumes by URL only a tab this Session may use, and only when one matches', async () => {
+    const { session, tab } = await withJobTab()
+    await asJob(session, async () => await session.open('https://jobs.example.com/apply/2', true))
+    await expect(asJob(session, async () => await session.resumeTab({ urlSubstring: '/nowhere' }))).rejects.toThrow('no tab this job-apply Session may use matches that URL')
+    await expect(asJob(session, async () => await session.resumeTab({ urlSubstring: '/apply' }))).rejects.toThrow('more than one tab matches that URL')
+    expect(await asJob(session, async () => await session.resumeTab({ urlSubstring: 'apply/2' }))).toMatchObject({ url: 'https://jobs.example.com/apply/2' })
+    expect(await asJob(session, async () => await session.closeTab(tab))).toMatchObject({ closed: tab })
+    await session.close()
+  })
+
+  it('lists only the tabs this Session may use after it closes one', async () => {
+    const { session, tab } = await withJobTab()
+    await session.open('https://owner.example.com/inbox', true)
+    const kept = await asJob(session, async () => await session.open('https://jobs.example.com/apply/2', true))
+    const closed = await asJob(session, async () => await session.closeTab(tab))
+    expect(closed.tabs.map(entry => entry.id)).toEqual([kept.tab])
+    await session.close()
+  })
+
+  it('reports a full strip, a failed first load, and any other failure to open without naming the page', async () => {
+    const { session, context } = await withJobTab()
+    context.nextGotoFailure = 'net::ERR_CONNECTION_REFUSED at https://jobs.example.com/down'
+    await expect(asJob(session, async () => await session.open('https://jobs.example.com/down', true))).rejects.toBeInstanceOf(TabNavigationError)
+    context.newPageFailures.push('newPage: renderer out of memory')
+    await expect(asJob(session, async () => await session.open('https://jobs.example.com/again', true))).rejects.toThrow(/^job-apply navigation failed$/u)
+    while (session.tabsState().length < 8) await session.open(`https://owner.example.com/${String(session.tabsState().length)}`, true)
+    await expect(asJob(session, async () => await session.open('https://jobs.example.com/full', true))).rejects.toThrow(/at most 8 tabs/u)
+    await session.close()
+  })
+
+  it('refuses a snapshot when the tab moves while it is captured', async () => {
+    const { session, page, tab } = await withJobTab()
+    const shot = await asJob(session, async () => await session.snapshot(tab))
+    expect(session.jobSnapshot('w', shot.path)).toEqual(Buffer.from('png'))
+    page.onScreenshot = () => { page.address = 'https://jobs.example.com/next' }
+    await expect(asJob(session, async () => await session.snapshot(tab))).rejects.toThrow('The tab moved during screenshot capture.')
+    await session.close()
+  })
+
+  it('writes a saved password only through a pinned handle still on its host and still a password input', async () => {
+    document.body.innerHTML = '<input id="pass" type="password" aria-label="Password">'
+    const { session, page, tab } = await withJobTab()
+    const write = async (request: { selector: string } | { axId: string }) =>
+      await asJob(session, async () => await session.fillSecret(request, 'hunter2', 'password', 'jobs.example.com', tab))
+    expect(await write({ selector: '#pass' })).toMatchObject({ url: 'https://jobs.example.com/apply' })
+    expect(page.filled.get(element('#pass'))).toBe('hunter2')
+    page.ownerFrameUrl = 'https://other.example.com/login'
+    await expect(write({ selector: '#pass' })).rejects.toThrow('the credential target moved away from its saved host')
+    page.ownerFrameUrl = undefined
+    page.onPin = (node) => { node.setAttribute('type', 'text') }
+    await expect(write({ selector: '#pass' })).rejects.toThrow('the credential target is no longer a password input')
+    element('#pass').setAttribute('type', 'password')
+    page.onPin = undefined
+    session.setAxResolver({ resolve: async () => page.elementHandle(element('#pass')) })
+    page.filled.clear()
+    await write({ axId: 'ax3' })
+    expect(page.filled.get(element('#pass'))).toBe('hunter2')
+    page.ownerFrameUrl = null
+    await expect(write({ axId: 'ax3' })).rejects.toThrow('the credential target moved away from its saved host')
+    await session.close()
+  })
+
+  it('checks each file input and chooser against the network policy before it takes files', async () => {
+    document.body.innerHTML = '<input type="file" id="resume"><button id="pick">Upload</button><input type="file" id="behind">'
+    const { session, page, tab } = await withJobTab()
+    const attach = async (target: Parameters<HeadlessBrowserSession['attachFiles']>[0]) =>
+      await asJob(session, async () => await session.attachFiles(target, ['/tmp/a.pdf'], tab))
+    expect(await attach({ selector: '#resume' })).toMatchObject({ ref: '#resume', inputs: 1 })
+    expect(await attach({ trigger: { selector: '#resume' } })).toMatchObject({ ref: '#resume', inputs: 1 })
+    page.chooser = { multiple: false, input: element('#behind') }
+    expect(await attach({ trigger: { selector: '#pick' } })).toMatchObject({ ref: '#pick' })
+    page.ownerFrameUrl = null
+    await expect(attach({ trigger: { selector: '#pick' } })).rejects.toThrow('navigation_refused: [invalid URL]')
+    page.ownerFrameUrl = undefined
+    document.body.innerHTML = '<p>The form is embedded</p>'
+    page.frames.push({ url: 'https://ats.example.com/form', box: { width: 400, height: 300 }, body: '<input type="file" id="resume">' })
+    expect(await attach({ selector: '#resume' })).toMatchObject({ ref: '#resume', inputs: 1 })
+    await session.close()
+  })
+
+  it('clicks the control around what a point hits, through labels and shadow hosts, and refuses an embedded frame', async () => {
+    document.body.innerHTML = '<button id="go"><span id="icon">Go</span></button>'
+      + '<label for="agree"><span id="agree-text">I agree</span></label><input type="checkbox" id="agree" aria-label="Agree">'
+      + '<button id="host-button" aria-label="Next"><div id="host"></div></button><div id="plain">Plain text</div><iframe id="frame"></iframe>'
+    const shadow = element('#host').attachShadow({ mode: 'open' })
+    shadow.innerHTML = '<span id="arrow">→</span>'
+    const arrow = shadow.querySelector('#arrow')
+    const { session, tab } = await withJobTab()
+    const at = async (hit: Element | null): Promise<string | undefined> => {
+      stub(document, 'elementFromPoint', () => hit === arrow ? element('#host') : hit)
+      stub(shadow, 'elementFromPoint', () => arrow)
+      const outcome = await asJob(session, async () => await session.click({ point: { x: 5, y: 5 } }, tab))
+      return outcome.point?.name
+    }
+    expect(await at(element('#icon'))).toBe('Go')
+    expect(await at(element('#agree-text'))).toBe('Agree')
+    expect(await at(arrow)).toBe('Next')
+    expect(await at(element('#plain'))).toBe('Plain text')
+    await expect(at(element('#frame'))).rejects.toThrow('Use a selector for controls inside an embedded frame.')
+    await session.close()
+  })
+
+  it('types at a point only into the editable field the click focused, through open shadow roots', async () => {
+    document.body.innerHTML = '<input id="email" aria-label="Email"><textarea id="letter" aria-label="Letter"></textarea>'
+      + '<input id="locked" aria-label="Locked" readonly><button id="send">Send</button><div id="host"></div>'
+    const shadow = element('#host').attachShadow({ mode: 'open' })
+    shadow.innerHTML = '<input id="inner" aria-label="Inner">'
+    const { session, page, tab } = await withJobTab()
+    const typeInto = async (field: HTMLElement) => {
+      stub(document, 'elementFromPoint', () => field.getRootNode() === shadow ? element('#host') : field)
+      stub(shadow, 'elementFromPoint', () => field)
+      field.focus()
+      return await asJob(session, async () => await session.fill({ point: { x: 5, y: 5 } }, 'text', tab))
+    }
+    await typeInto(element('#email') as HTMLElement)
+    await typeInto(element('#letter') as HTMLElement)
+    await typeInto(shadow.querySelector('#inner') as HTMLElement)
+    expect(page.inserted).toEqual(['text', 'text', 'text'])
+    await expect(typeInto(element('#locked') as HTMLElement)).rejects.toThrow('The viewport point did not focus an editable field.')
+    await expect(typeInto(element('#send') as HTMLElement)).rejects.toThrow('The viewport point did not focus an editable field.')
+    await session.close()
+  })
+
+  it('checks the link and form a click would follow against the network policy and the call’s site boundary', async () => {
+    document.body.innerHTML = '<a id="inbox" href="https://mail.google.com/">Inbox</a><a id="script" href="javascript:void(0)">Questions</a>'
+      + '<button id="post">Send</button><button id="local">Save</button>'
+    const { session, page, tab } = await withJobTab()
+    page.facts.set(element('#inbox'), { href: 'https://mail.google.com/' })
+    page.facts.set(element('#script'), { href: 'javascript:void(0)' })
+    page.facts.set(element('#post'), { formAction: 'https://forms.other.example/submit' })
+    page.facts.set(element('#local'), { formAction: 'https://mail.google.com/submit' })
+    const click = async (selector: string, guard?: ActionGuard) => await asJob(session, async () => await session.click({ selector }, tab), 'w', guard)
+    await expect(click('#inbox')).rejects.toThrow('navigation_refused: mail.google.com')
+    await click('#script')
+    await click('#post')
+    await expect(click('#local')).rejects.toThrow('navigation_refused: mail.google.com')
+    const bounded = new ActionGuard()
+    bounded.anchor('https://jobs.example.com/apply')
+    await expect(click('#post', bounded)).rejects.toBeInstanceOf(ActionRefusedError)
+    expect(page.clicked).toEqual([element('#script'), element('#post')])
+    await session.close()
+  })
+
+  it('closes a popup that opens on a denied page, even when that close fails', async () => {
+    const { session, context, page } = await withJobTab()
+    const popup = new FakePage(context)
+    popup.address = 'https://mail.google.com/mail'
+    popup.closeFailure = 'Target page, context or browser has been closed'
+    page.fire('popup', popup.page)
+    await vi.waitFor(() => { expect(LOG.warn).toHaveBeenCalledWith('headless-browser: adopting a popup of %s failed: %s', 't1', 'navigation_refused: mail.google.com') })
+    expect(session.tabsState().map(entry => entry.id)).toEqual(['t1'])
     await session.close()
   })
 })

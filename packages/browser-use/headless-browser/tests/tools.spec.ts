@@ -444,6 +444,13 @@ describe('scrolling through the tool', () => {
     expect(scroll).toHaveBeenCalledWith({ x: 30, y: 40, to: 'bottom' }, undefined)
   })
 
+  it('passes a zero distance through when the call names no edge', async () => {
+    const scroll = vi.fn(async (_request: ScrollRequest, _tab?: string) => SCROLLED)
+    const tools = bench(fakeBrowser({ scroll }))
+    expect(await tools.call('headless_browser_scroll', { deltaY: 0 })).toEqual(SCROLLED)
+    expect(scroll).toHaveBeenCalledWith({ deltaY: 0 }, undefined)
+  })
+
   it('refuses a scroll request that names neither a distance nor an edge', async () => {
     const tools = bench(fakeBrowser())
     expect(await tools.call('headless_browser_scroll', {})).toEqual({

@@ -82,7 +82,11 @@ export function deniedJobUrl(raw: string): boolean {
   if (isDeniedHost(host)) return !isPublicCareerUrl(raw, url)
   const domain = registrableDomain(host)
   let path = url.pathname
-  try { path = decodeURIComponent(path) } catch (error: unknown) { if (!(error instanceof URIError)) throw error }
+  try {
+    path = decodeURIComponent(path)
+  } catch (_malformed: unknown) {
+    // decodeURIComponent throws only URIError, for a malformed escape; the raw path is compared then.
+  }
   return domain !== null && mailProviders.has(domain) && /(?:^|\/)(?:mail|inbox)(?:\/|$)/iu.test(path)
 }
 

@@ -39,7 +39,13 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 
 interface Written { readonly request: TargetRequest; readonly secret: string; readonly field: SecretField; readonly host: string }
 
-function setup(overrides: Partial<FormBrowser> = {}, uploads?: FormUploads) {
+/** How one bench mounts the tools: without the password manager, or listing only the current site's accounts. */
+interface BenchOptions {
+  readonly withoutCredentials?: boolean
+  readonly listCurrentHostOnly?: boolean
+}
+
+function setup(overrides: Partial<FormBrowser> = {}, uploads?: FormUploads, options: BenchOptions = {}) {
   const page = { url: 'https://Acme.wd5.myworkdayjobs.com/en-US/careers/signup' }
   const root = mkdtempSync(join(tmpdir(), 'dsh-form-tools-'))
   roots.push(root)
@@ -65,7 +71,8 @@ function setup(overrides: Partial<FormBrowser> = {}, uploads?: FormUploads) {
   registerFormTools(ctx, {
     browser,
     takeover,
-    credentials: vault,
+    ...options.withoutCredentials === true ? {} : { credentials: vault },
+    ...options.listCurrentHostOnly === undefined ? {} : { listCurrentHostOnly: options.listCurrentHostOnly },
     uploads: uploads ?? { dirs: ['/up'], resolve: async files => files.map(name => ({ path: `/up/${name}`, name, bytes: 10 })) },
     log,
   })
@@ -92,6 +99,10 @@ describe('form tool registration', () => {
       expect(() => { assertSupportedJsonSchema(definition.output.schema) }).not.toThrow()
       expect(definition.presentCall?.({ action: 'create', files: ['resume.pdf'] })).toMatchObject({ card: 'generic' })
     }
+  })
+
+  it('registers only upload when the host has no password manager', () => {
+    expect([...setup({}, undefined, { withoutCredentials: true }).definitions.keys()]).toEqual(['headless_browser_upload'])
   })
 
   it('titles each credential action and an upload by its files', () => {
@@ -249,6 +260,18 @@ describe('headless_browser_credential', () => {
     expect(listed.accounts).toHaveLength(1)
     expect(JSON.stringify(listed)).not.toContain((await bench.vault.find('acme.wd5.myworkdayjobs.com')).password)
   })
+
+  it('lists only the accounts of the tab’s own site when the scope asks for that, and reports a tab it cannot read', async () => {
+    const pageUrl = vi.fn<FormBrowser['pageUrl']>(async () => 'https://acme.wd5.myworkdayjobs.com/en-US/careers')
+    const bench = setup({ pageUrl }, undefined, { listCurrentHostOnly: true })
+    await bench.vault.create({ host: 'acme.wd5.myworkdayjobs.com', username: 'cv@example.com' })
+    await bench.vault.create({ host: 'other.example.com', username: 'cv@example.com' })
+    const listed = await bench.call('headless_browser_credential', { action: 'list', tab: 't3' }) as { accounts: { host: string }[] }
+    expect(listed.accounts.map(account => account.host)).toEqual(['acme.wd5.myworkdayjobs.com'])
+    expect(pageUrl).toHaveBeenCalledWith('t3')
+    pageUrl.mockRejectedValueOnce(new Error('tab t9 is closed'))
+    expect(await bench.call('headless_browser_credential', { action: 'list', tab: 't9' })).toMatchObject({ error: expect.stringContaining('tab t9 is closed') as string })
+  })
 })
 
 describe('headless_browser_upload', () => {
@@ -259,6 +282,14 @@ describe('headless_browser_upload', () => {
       attached: [{ name: 'resume.pdf', bytes: 10 }], ref: '#resume', url: 'https://jobs.example.com/apply', inputs: 2,
     })
     expect(attachFiles).toHaveBeenCalledWith({ selector: '#resume', index: 1 }, ['/up/resume.pdf'], undefined)
+  })
+
+  it('hands the browser the file contents the policy read instead of their paths', async () => {
+    const attachFiles = vi.fn<FormBrowser['attachFiles']>(async () => ({ url: 'https://jobs.example.com/apply', ref: '#resume', inputs: 1 }))
+    const payload = { name: 'Resume.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7') }
+    const bench = setup({ attachFiles }, { dirs: [], resolve: async () => [{ path: '/jobs/private/resume.pdf', name: 'Resume.pdf', bytes: 8, payload }] })
+    expect(await bench.call('headless_browser_upload', { files: ['Resume.pdf'], selector: '#resume' })).toMatchObject({ attached: [{ name: 'Resume.pdf', bytes: 8 }] })
+    expect(attachFiles).toHaveBeenCalledWith({ selector: '#resume' }, [payload], undefined)
   })
 
   it('passes a trigger through as a guarded click target', async () => {

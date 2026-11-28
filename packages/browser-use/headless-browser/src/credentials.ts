@@ -288,8 +288,8 @@ export class CredentialVault {
     // Without a login name every account on the host matches, so only a named login can match none.
     if (username !== undefined && named.length === 0) throw new CredentialError(`${bare} has no saved password for ${username}; saved login names: ${onHost.map(entry => entry.username).join(', ')}`)
     const labels = named.map(entry => entry.label?.trim() ?? '').filter(name => name !== '')
-    if (wanted !== '' && matches.length === 0) {
-      throw new CredentialError(`${bare} has no saved password labelled ${label?.trim() ?? ''}; saved labels: ${labels.join(', ') || 'none'}`)
+    if (label !== undefined && wanted !== '' && matches.length === 0) {
+      throw new CredentialError(`${bare} has no saved password labelled ${label.trim()}; saved labels: ${labels.join(', ') || 'none'}`)
     }
     const oneLogin = new Set(matches.map(entry => entry.username.toLowerCase())).size === 1
     if (oneLogin && labels.length === matches.length) throw new CredentialError(`${bare} has ${String(matches.length)} saved accounts; pass label: ${labels.join(' | ')}`)
