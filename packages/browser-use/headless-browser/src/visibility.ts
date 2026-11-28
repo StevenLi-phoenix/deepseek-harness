@@ -110,6 +110,11 @@ export interface ElementFacts {
    * Never carries a `value` attribute. Page-derived, so only ever shown as page data.
    */
   readonly markup?: string
+  /**
+   * Where inside the element a click lands on it, relative to its box, when its label's own transparent input lies
+   * over its centre (Eightfold's radios); absent otherwise.
+   */
+  readonly labelAim?: { readonly x: number; readonly y: number }
   /** Number of ancestors that clip the element's box. */
   readonly clippedBy: number
   /** Fraction of the border box left after every clipping ancestor. */
@@ -348,8 +353,12 @@ export function probeElement(element: Element): ElementFacts {
     if (node.querySelector('a[href], button, input, select, textarea, [role=button], [role=link]') !== null) return null
     return showsField(flatText(node)) ? node : null
   }
+  // A label's text under its own transparent input (Eightfold's radios at careers.qualcomm.com): a click there
+  // reaches the input, which is what a click on the label does, so that hit counts as reaching the label.
+  const ownControl = element.closest('label')?.control ?? null
   const reaches = (hit: Element): boolean => {
     for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    if (ownControl !== null && hit === ownControl) return true
     for (let node: Element | null = element; node !== null; node = parentOf(node)) {
       const nodeRoot = node.getRootNode()
       if (node.parentElement === null && nodeRoot instanceof ShadowRoot && nodeRoot.host === hit) return true
@@ -370,6 +379,27 @@ export function probeElement(element: Element): ElementFacts {
     aimHeight = box.height
   }
   const cover = centreHit === null || reaches(centreHit) ? null : centreHit
+  // Playwright refuses a click whose point another element takes, even the label's own input, so a label's text under
+  // that input is clicked at the point nearest its centre where the text itself is on top.
+  const onElement = (hit: Element | null): boolean => {
+    for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    return false
+  }
+  let labelAim: { readonly x: number; readonly y: number } | undefined
+  if (ownControl !== null && centreHit === ownControl) {
+    search: for (const down of [0.5, 0.25, 0.75]) {
+      for (let step = 1; step < 10; step += 1) {
+        for (const across of [0.5 + step * 0.05, 0.5 - step * 0.05]) {
+          const x = inViewLeft + inViewWidth * across
+          const y = inViewTop + inViewHeight * down
+          if (onElement(deepHit(x, y))) {
+            labelAim = { x: x - rect.left, y: y - rect.top }
+            break search
+          }
+        }
+      }
+    }
+  }
   const coverText = cover === null ? '' : (cover.getAttribute('aria-label') ?? flatText(cover)).slice(0, 60)
   const coverRole = cover?.getAttribute('role') ?? null
   const coveredBy = cover === null
@@ -417,6 +447,7 @@ export function probeElement(element: Element): ElementFacts {
     viewportFraction: fraction(inViewWidth * inViewHeight),
     occlusion: inViewWidth <= 0 || inViewHeight <= 0 ? 0 : hits / points.length,
     ...coveredBy === undefined ? {} : { coveredBy },
+    ...labelAim === undefined ? {} : { labelAim },
     markup,
     clippedBy,
     clippingFraction: fraction(clippedArea),
@@ -673,6 +704,9 @@ export function readElementFacts(value: unknown): ElementFacts {
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
   const ariaHiddenOwn = record.ariaHiddenOwn
   if (ariaHiddenOwn !== undefined && typeof ariaHiddenOwn !== 'boolean') throw new Error('the visibility probe returned no ariaHiddenOwn')
+  const labelAim = record.labelAim as { x?: unknown; y?: unknown } | undefined
+  if (labelAim !== undefined && (typeof labelAim !== 'object' || labelAim === null || typeof labelAim.x !== 'number' || typeof labelAim.y !== 'number'
+    || !Number.isFinite(labelAim.x) || !Number.isFinite(labelAim.y))) throw new Error('the visibility probe returned no labelAim')
   return {
     name: text('name'),
     value: text('value'),
@@ -692,6 +726,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     occlusion: number('occlusion'),
     ...coveredBy === undefined ? {} : { coveredBy },
     ...markup === undefined ? {} : { markup },
+    ...labelAim === undefined ? {} : { labelAim: { x: labelAim.x as number, y: labelAim.y as number } },
     clippedBy: number('clippedBy'),
     clippingFraction: number('clippingFraction'),
   }

@@ -1587,9 +1587,15 @@ export class HeadlessBrowserSession {
     }
     const facts: ElementFacts[] = []
     const covers: { readonly facts: ElementFacts; readonly element: Actionable; readonly aim?: ClickPoint }[] = []
+    const aims = new Map<number, ClickPoint>()
     for (let index = 0; index < count; index += 1) {
       const candidate = readElementFacts(await locator.nth(index).evaluate(probeElement))
       facts.push(candidate)
+      if (candidate.labelAim !== undefined) {
+        // Label text partly under its own transparent input is clicked where the text is on top.
+        aims.set(index, candidate.labelAim)
+        this.#log.info('headless-browser: %s match %d: its label\'s own input covers its centre; clicking the text beside it', selector, index)
+      }
       if ((candidate.tag === 'input' || candidate.tag === 'label') && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
         // A checkbox or radio the page draws itself hides the native input; its label or same-name box is what a person clicks.
         const standIn = (await locator.nth(index).evaluateHandle(findToggleStandIn)).asElement()
@@ -1635,7 +1641,7 @@ export class HeadlessBrowserSession {
         if (cover === undefined) throw new Error(`${selector} has no candidate ${String(index)}`)
         return cover.element
       },
-      aim: index => covers[index - count]?.aim,
+      aim: index => index < count ? aims.get(index) : covers[index - count]?.aim,
     }
   }
 

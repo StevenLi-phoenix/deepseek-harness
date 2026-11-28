@@ -224,6 +224,32 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).title()).toBe('clicked')
   }, 120_000)
 
+  it('checks an Eightfold radio by its aria-hidden label text, under the transparent input it labels, and refuses a veiled label', async () => {
+    // Live careers.qualcomm.com EEO step, 2026-11-27 22:43: text="Male" scored ariaHidden 0, occlusion 0.40, under the label's own input.
+    const app = await boot()
+    const radio = (value: string, text: string): string => [
+      '<div class="radio-module_selector" style="position:relative;display:inline-flex;align-items:center;height:24px;margin-right:24px">',
+      `<input aria-disabled="false" aria-label="${text}, Please select your gender." id="G-${value}" name="G" type="radio" value="${value}"`,
+      ' style="position:absolute;left:0;top:0;width:44px;height:24px;margin:0;opacity:0;cursor:pointer;z-index:1">',
+      `<label for="G-${value}" aria-hidden="true" style="display:inline-flex;align-items:center;cursor:pointer">`,
+      '<span style="width:16px;height:16px;border:1px solid #333;border-radius:50%;margin-right:8px"></span>',
+      `<span id="G-${value}-label">${text}</span></label></div>`,
+    ].join('')
+    await load(app, [
+      '<fieldset style="border:0;margin:40px"><legend>Please select your gender. *</legend>', radio('M', 'Male'), radio('F', 'Female'), '</fieldset>',
+      '<div style="position:relative;margin:40px"><input type="checkbox" id="terms" aria-label="Terms">',
+      '<label for="terms" aria-hidden="true"><span id="agree">Agree</span></label>',
+      '<div id="veil" style="position:absolute;inset:0;opacity:0"></div></div>',
+    ].join(''))
+    const page = await app.browser.page()
+    await app.browser.click({ selector: 'text="Male"' })
+    expect(await page.locator('#G-M').isChecked()).toBe(true)
+    await app.browser.click({ selector: 'text="Female"' })
+    expect(await page.locator('#G-F').isChecked()).toBe(true)
+    expect((await refusalOf(app.browser.click({ selector: '#agree' }))).reason).toMatch(/ariaHidden=0\.00/u)
+    expect(await page.locator('#terms').isChecked()).toBe(false)
+  }, 120_000)
+
   it('types into a react-select whose search input is transparent, as ADP draws its Country field', async () => {
     // Live ADP WorkforceNow, 2026-11-27 20:58: MDFSelectBox__input scored opacity 0 and the arrow ariaHidden 0.
     const app = await boot()
