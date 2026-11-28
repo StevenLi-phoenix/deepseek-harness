@@ -63,6 +63,13 @@ const COMBOBOX_POLL_MS = 250
 const OPTION_SETTLE_MS = 1_500
 
 /**
+ * How long a page that switched pointer events off everywhere gets to take them again before the guard judges its
+ * field: PeopleSoft does so while it saves a changed field, so Northwestern University's Confirm Password, right after
+ * the password, scored pointerEvents 0 under the html element (2026-11-28).
+ */
+const BUSY_SETTLE_MS = 3_000
+
+/**
  * How long a selector that matches nothing gets to appear before the miss is
  * reported: a click that opens the next step returns before the step draws, and
  * the next call usually names an element of that step. The wait ends as soon as
@@ -370,6 +377,17 @@ async function linkHosts(page: Page): Promise<string[]> {
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Whether a page has switched pointer events off everywhere, as PeopleSoft does while it saves a field: every candidate
+ * fails, and one is click-through with the document itself under its centre.
+ * @param facts - the candidates' measurements.
+ * @returns whether the guard should give the page a moment before it judges.
+ */
+function pageIsBusy(facts: readonly ElementFacts[]): boolean {
+  if (facts.length === 0 || facts.some(candidate => scoreVisibility(candidate).score >= VISIBILITY_THRESHOLD)) return false
+  return facts.some(candidate => candidate.pointerEvents === 'none' && /^(?:html|body)\b/u.test(candidate.coveredBy ?? ''))
 }
 
 /** A click position inside an element, in CSS pixels from its top-left corner. */
@@ -1152,7 +1170,7 @@ export class HeadlessBrowserSession {
         this.#assertJobUrl(page.url())
         return { url: page.url(), point, ...await this.#openedSince(mark, popupMark) }
       }
-      const resolution = await this.#resolve(page, request)
+      const resolution = await this.#resolveSettled(page, request)
       const target = this.#decideOn('click', resolution, request.allowOrigin === true)
       this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const mark = this.#downloads.mark()
@@ -1244,7 +1262,7 @@ export class HeadlessBrowserSession {
         this.#assertJobUrl(page.url())
         return { url: page.url(), point }
       }
-      const resolution = await this.#resolve(page, request)
+      const resolution = await this.#resolveSettled(page, request)
       const target = this.#decideOn('type', resolution, request.allowOrigin === true)
       this.#authorizeTarget(resolution.url, resolution.facts[target.index])
       const element = resolution.element(target.index)
@@ -1417,7 +1435,7 @@ export class HeadlessBrowserSession {
     if (request.point !== undefined) throw new SecretFieldError('a saved credential goes into a field named by selector or axId, never a point')
     return await this.#guarded('filling a saved credential', async () => {
       const page = await this.page(tabId)
-      const resolution = await this.#resolve(page, request)
+      const resolution = await this.#resolveSettled(page, request)
       const target = this.#decideOn('type', resolution, false)
       const element = resolution.element(target.index)
       if (field === 'password' && !await element.evaluate(passwordInput)) {
@@ -1706,6 +1724,28 @@ export class HeadlessBrowserSession {
       const decision = this.#activeGuard().decideNavigation({ action: 'open', url, target: facts.formAction, allowOrigin: false })
       if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
     }
+  }
+
+  /**
+   * Resolve a request, waiting up to {@link BUSY_SETTLE_MS} while the page has switched pointer events off everywhere:
+   * every candidate fails and one is click-through with only the document behind it. Any other refusal is judged at once.
+   * @param page - the page the action runs in.
+   * @param request - the target the model named.
+   * @returns the last resolution.
+   */
+  async #resolveSettled(page: Page, request: TargetRequest): Promise<Resolution> {
+    let resolution = await this.#resolve(page, request)
+    let waited = 0
+    while (waited < BUSY_SETTLE_MS && pageIsBusy(resolution.facts)) {
+      await page.waitForTimeout(COMBOBOX_POLL_MS)
+      waited += COMBOBOX_POLL_MS
+      resolution = await this.#resolve(page, request)
+    }
+    if (waited > 0) {
+      this.#log.info('headless-browser: %s waited %d ms for %s to take pointer events again%s', resolution.ref, waited,
+        pageOrigin(page.url()), pageIsBusy(resolution.facts) ? '; it still has not' : '')
+    }
+    return resolution
   }
 
   /** Let the guard choose one of a resolved selector's candidates for an action, or refuse. */

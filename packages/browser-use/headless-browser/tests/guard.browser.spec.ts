@@ -275,6 +275,35 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await page.locator('#bot').isChecked()).toBe(false)
   }, 120_000)
 
+  it('waits for a page that switched pointer events off everywhere to take them again, as PeopleSoft does after a field changes', async () => {
+    // Live Northwestern University PeopleSoft registration, 2026-11-28: right after the password went in, Confirm
+    // Password scored pointerEvents 0 and occlusion 0, covered by the html element.
+    const app = await boot()
+    await load(app, [
+      '<div style="margin:40px"><input id="pw" type="password" aria-label="Password"><br><br>',
+      '<input id="confirm" type="password" aria-label="Confirm Password"><br><br><button id="next">Next</button></div>',
+      '<script>document.getElementById("pw").addEventListener("input", () => {',
+      ' document.body.style.pointerEvents = "none"; setTimeout(() => { document.body.style.pointerEvents = "" }, 800) });',
+      'document.getElementById("next").addEventListener("click", () => { document.title = "next" })</script>',
+    ].join(''))
+    const page = await app.browser.page()
+    await app.browser.fill({ selector: '#pw' }, 'first')
+    expect(await page.evaluate(() => document.body.style.pointerEvents)).toBe('none')
+    await app.browser.fill({ selector: '#confirm' }, 'second')
+    expect(await page.locator('#confirm').inputValue()).toBe('second')
+    await app.browser.fill({ selector: '#pw' }, 'again')
+    await app.browser.click({ selector: '#next' })
+    expect(await page.title()).toBe('next')
+  }, 120_000)
+
+  it('still refuses a field on a page that stays click-through, once the wait runs out', async () => {
+    const app = await boot()
+    await load(app, '<div style="margin:40px"><input id="field" aria-label="Name"></div><script>document.body.style.pointerEvents = "none"</script>')
+    const started = Date.now()
+    expect((await refusalOf(app.browser.fill({ selector: '#field' }, 'Ada'))).reason).toMatch(/pointerEvents=0\.00/u)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2_500)
+  }, 120_000)
+
   it('types into a react-select whose search input is transparent, as ADP draws its Country field', async () => {
     // Live ADP WorkforceNow, 2026-11-27 20:58: MDFSelectBox__input scored opacity 0 and the arrow ariaHidden 0.
     const app = await boot()
