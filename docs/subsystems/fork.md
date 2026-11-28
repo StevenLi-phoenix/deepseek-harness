@@ -590,6 +590,14 @@ accounts(): AccountView[]
 search(account: string, query: string, options: SearchOptions = {}): Promise<SearchResult>
 
 /**
+ * Read only the newest verification code or link from a browser-authorized sender domain.
+ * @param account - account id.
+ * @param lookup - the approved sender and receipt bounds.
+ * @returns a reduced code or link result, or null when no code matched.
+ */
+verificationCode(account: string, lookup: VerificationLookup): Promise<VerificationProof | null>
+
+/**
  * Read one thread: its newest messages in full.
  * @param account - account id.
  * @param threadId - thread id.
