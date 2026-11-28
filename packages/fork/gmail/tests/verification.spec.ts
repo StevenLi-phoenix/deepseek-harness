@@ -152,10 +152,29 @@ describe('Gmail verification proofs', () => {
   it('returns a code instead of a newer link, and otherwise marks competing verification links ambiguous', async () => {
     const links = [
       message('new', 'Verify account', { body: simplePart('https://mail.example.co.uk/verify?a=new') }),
-      message('old', 'Verify account', { beforeMs: 2000, body: simplePart('https://mail.example.co.uk/verify?a=old') }),
+      message('other', 'Verify account', { beforeMs: 1500, body: simplePart('https://pinned-mailer.example/verify?a=other') }),
     ]
     expect(await fixture(links).run()).toEqual({ code: null, link: 'https://mail.example.co.uk/verify?a=new', domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: true })
     expect(await fixture([...links, message('code', 'Verify account with 4321', { beforeMs: 3000 })]).run()).toEqual(result('4321', NOW - 3000))
+  })
+
+  it('takes a resend\'s link over the earlier link on the same host, as WellSky\'s Workday account email resent one', async () => {
+    const h = fixture([
+      message('resent', 'Verify account', { body: simplePart('https://mail.example.co.uk/verify?a=resent') }),
+      message('first', 'Verify account', { beforeMs: 2000, body: simplePart('https://mail.example.co.uk/verify?a=first') }),
+    ])
+    expect(await h.run()).toEqual({ code: null, link: 'https://mail.example.co.uk/verify?a=resent', domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: false })
+  })
+
+  it('takes the link on the caller\'s live host over a newer one for another tenant of the same sender', async () => {
+    // Workday mails every tenant's account verification from myworkday.com.
+    const h = fixture([
+      message('tenant', 'Verify account', { body: simplePart('https://pinned-mailer.example/verify?a=other-tenant') }),
+      message('live', 'Verify account', { beforeMs: 2000, body: simplePart('https://mail.example.co.uk/verify?a=resent') }),
+      message('live-first', 'Verify account', { beforeMs: 3000, body: simplePart('https://mail.example.co.uk/verify?a=first') }),
+    ])
+    expect(await h.run({ ...LOOKUP, liveHost: 'mail.example.co.uk' })).toEqual({ code: null, link: 'https://mail.example.co.uk/verify?a=resent', domain: 'example.co.uk', receivedAt: NOW - 2000, ambiguous: false })
+    expect(await h.run({ ...LOOKUP, liveHost: 'careers.example.co.uk' })).toEqual({ code: null, link: 'https://pinned-mailer.example/verify?a=other-tenant', domain: 'example.co.uk', receivedAt: NOW - 1000, ambiguous: true })
   })
 
   it('finds nothing when no message matches', async () => {

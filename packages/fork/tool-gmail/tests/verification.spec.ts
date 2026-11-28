@@ -158,9 +158,20 @@ describe('verification-only mode', () => {
     })
     expect((await h.invoke({ ...ARGS, sender_domain: 'myworkday.com' })).value).toMatchObject({ found: true, code: RESULT.code, from_domain: 'workday.com' })
     expect(asked).toEqual(['myworkday.com', 'workday.com', 'myworkdayjobs.com'])
+    expect(h.gmail.verificationCode).toHaveBeenCalledWith('work', expect.objectContaining({ liveHost: 'pipersandler.wd501.myworkdayjobs.com' }))
     const plain = await mount()
     await plain.invoke(ARGS)
     expect(plain.gmail.verificationCode).toHaveBeenCalledTimes(1)
+  })
+
+  it('prefers a link on the live host to a newer link for another tenant from another alias domain', async () => {
+    const h = await mount('wellsky.wd1.myworkdayjobs.com')
+    h.gmail.verificationCode.mockImplementation(async (_account, lookup) => {
+      if (lookup.domain === 'myworkday.com') return { ...RESULT, code: null, link: 'https://wellsky.wd1.myworkdayjobs.com/activate', domain: 'myworkday.com' }
+      if (lookup.domain === 'workday.com') return { ...RESULT, code: null, link: 'https://litera.wd12.myworkdayjobs.com/activate', domain: 'workday.com', receivedAt: RESULT.receivedAt + 60_000 }
+      return null
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'myworkday.com' })).value).toMatchObject({ found: true, link: 'https://wellsky.wd1.myworkdayjobs.com/activate', from_domain: 'myworkday.com' })
   })
 
   it('accepts an employer sender that the caller\'s Oracle page links to, with links back to that ATS', async () => {

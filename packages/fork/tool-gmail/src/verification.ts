@@ -157,6 +157,18 @@ function registrable(browser: JobApplyBrowser, value: unknown): string | null {
  * @param ctx - the preset's scope, which can see its own browser bridge.
  * @param gmail - the Gmail service.
  */
+/**
+ * Across alias domains the newest proof wins, except that a link on the live host outranks a link elsewhere: Workday mails
+ * each tenant's account verification from its alias domains, so a newer link may belong to another employer's tenant.
+ */
+function outranks(found: VerificationProof, answer: VerificationProof, live: string): boolean {
+  if (found.link !== null && answer.link !== null) {
+    const foundLive = URL.parse(found.link)?.hostname === live
+    if (foundLive !== (URL.parse(answer.link)?.hostname === live)) return foundLive
+  }
+  return found.receivedAt > answer.receivedAt
+}
+
 export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
   ctx.tools.register(defineTool({
     name: 'gmail_accounts',
@@ -222,11 +234,12 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
               if (linkDomain === null || sensitive(host) || sensitive(linkDomain)) return false
               return sameSite(sender, linkDomain) || vouched && linkDomain === site
             },
+            liveHost: before,
             after: now - since * MINUTE_MS,
             before: now,
             signal: exec.signal,
           })
-          if (found !== null && (answer === null || found.receivedAt > answer.receivedAt)) answer = found
+          if (found !== null && (answer === null || outranks(found, answer, before))) answer = found
         }
       } catch {
         // API diagnostics may contain message ids or caller data. Only emit the stable failure key.

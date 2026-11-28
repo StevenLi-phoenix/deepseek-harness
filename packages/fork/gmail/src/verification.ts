@@ -8,6 +8,8 @@ export interface VerificationLookup {
   readonly domain: string
   readonly domainOf: (host: string) => string | null
   readonly allowsLinkHost: (host: string) => boolean
+  /** Host of the caller's live page: a link on it outranks links on other hosts, since Workday mails every tenant from myworkday.com. */
+  readonly liveHost?: string
   readonly after: number
   readonly before: number
   readonly signal: AbortSignal
@@ -111,7 +113,8 @@ function linkFrom(subject: string, body: string, lookup: VerificationLookup): st
  * @param limit - maximum matching metadata reads; an incomplete result must not report a code.
  * @param maxHtmlChars - bound on HTML decoding.
  * @param maxBodyChars - bound on text inspected for a code.
- * @returns the newest code (or newest link if there are no codes), with ambiguity when another differs.
+ * @returns the newest code, with ambiguity when another code differs; or else the newest link, preferring the live host,
+ * with ambiguity when a link on another host competes.
  */
 export async function readVerificationCode(
   api: GmailApi, lookup: VerificationLookup, limit: number, maxHtmlChars: number, maxBodyChars: number,
@@ -130,8 +133,7 @@ export async function readVerificationCode(
   }))
   const candidates = metadata.flat().sort((a, b) => b.time - a.time || a.id.localeCompare(b.id))
   let newestCode: VerificationProof | null = null
-  let newestLink: VerificationProof | null = null
-  let ambiguousLink = false
+  const links: { readonly link: string; readonly host: string; readonly time: number }[] = []
   for (const { id, time, subject } of candidates) {
     lookup.signal.throwIfAborted()
     let code = codeFrom(subject, '')
@@ -148,9 +150,16 @@ export async function readVerificationCode(
       if (newestCode === null) newestCode = { code, link: null, domain: lookup.domain, receivedAt: time, ambiguous: false }
       else if (newestCode.code !== code) return { ...newestCode, ambiguous: true }
     } else if (link !== undefined) {
-      if (newestLink === null) newestLink = { code: null, link, domain: lookup.domain, receivedAt: time, ambiguous: false }
-      else if (newestLink.link !== link) ambiguousLink = true
+      links.push({ link, host: new URL(link).hostname, time })
     }
   }
-  return newestCode ?? (newestLink === null ? null : { ...newestLink, ambiguous: ambiguousLink })
+  if (newestCode !== null) return newestCode
+  const onLiveHost = links.filter(entry => entry.host === lookup.liveHost)
+  const pool = onLiveHost.length > 0 ? onLiveHost : links
+  const newest = pool[0]
+  if (newest === undefined) return null
+  // A different link on the same host is an earlier send of the same verification, which a resend supersedes
+  // (WellSky's Workday account email, 2026-11-28); a link on another host competes with it.
+  const ambiguous = pool.some(entry => entry.host !== newest.host)
+  return { code: null, link: newest.link, domain: lookup.domain, receivedAt: newest.time, ambiguous }
 }
