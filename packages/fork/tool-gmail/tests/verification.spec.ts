@@ -13,7 +13,7 @@ const MISMATCH = { ...NO_CODE, error: 'domain_mismatch' }
 const ARGS = { account: 'work', sender_domain: 'Mail.Example.CO.UK.' }
 const SESSION = openTurn([], [], 'job-session')
 
-async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrowser = true, mode: ToolGmail.Config['mode'] = 'verification-only') {
+async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrowser = true, mode: ToolGmail.Config['mode'] = 'verification-only', links: string[] = []) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
@@ -25,6 +25,7 @@ async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrow
     held: vi.fn(), search: vi.fn(), thread: vi.fn(), message: vi.fn(), download: vi.fn(),
   }
   const currentHost = vi.fn(async (_id: string, _signal?: AbortSignal) => host)
+  const linkedHosts = vi.fn(async (_id: string, _signal?: AbortSignal): Promise<readonly string[]> => links)
   // This is a deliberately small fixture, not a replacement PSL implementation.
   const registrableDomain = vi.fn((value: string) => {
     const labels = value.split('.')
@@ -35,14 +36,14 @@ async function mount(host: string | null = 'Careers.Example.Co.Uk.', provideBrow
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
   ctx.provide('gmail', gmail as never)
-  if (provideBrowser) ctx.provide('jobApplyBrowser', { currentHost, registrableDomain })
+  if (provideBrowser) ctx.provide('jobApplyBrowser', { currentHost, linkedHosts, registrableDomain })
   await ctx.plugin(ToolGmail, { timeZone: 'UTC', mode })
   const invoke = async (args: Record<string, unknown>, withAgent = true, signal = new AbortController().signal) => {
     const tool = ctx.tools.get('gmail_verification_code')!
     const value = await tool.execute(args, { agent: withAgent ? { session: SESSION } : undefined, signal } as never)
     return { value, content: tool.output.render(args, value as JsonValue) }
   }
-  return { ctx, gmail, logs, currentHost, registrableDomain, invoke }
+  return { ctx, gmail, logs, currentHost, linkedHosts, registrableDomain, invoke }
 }
 
 afterEach(async () => {
@@ -151,6 +152,32 @@ describe('verification-only mode', () => {
     const plain = await mount()
     await plain.invoke(ARGS)
     expect(plain.gmail.verificationCode).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts an employer sender that the caller\'s Oracle page links to, with links back to that ATS', async () => {
+    const h = await mount('eodr.fa.us2.oraclecloud.com', true, 'verification-only', ['www.tenethealth.com', 'eodr.fa.us2.oraclecloud.com'])
+    h.gmail.verificationCode.mockImplementationOnce(async (_account, lookup) => {
+      expect(lookup.domain).toBe('tenethealth.com')
+      expect(lookup.allowsLinkHost('eodr.fa.us2.oraclecloud.com')).toBe(true)
+      expect(lookup.allowsLinkHost('careers.tenethealth.com')).toBe(true)
+      expect(lookup.allowsLinkHost('evil.example')).toBe(false)
+      return { ...RESULT, domain: 'tenethealth.com' }
+    })
+    expect((await h.invoke({ ...ARGS, sender_domain: 'tenethealth.com' })).value).toMatchObject({ found: true, from_domain: 'tenethealth.com' })
+    expect(h.linkedHosts).toHaveBeenCalledWith('job-session', expect.anything())
+    expect(h.logs).toContain('tool-gmail: gmail_verification_code employer sender %s vouched by the %s page')
+  })
+
+  it.each([
+    ['eodr.fa.us2.oraclecloud.com', 'other.example', ['www.tenethealth.com']],
+    ['eodr.fa.us2.oraclecloud.com', 'linkedin.com', ['www.linkedin.com']],
+    ['eodr.fa.us2.oraclecloud.com', 'myworkday.com', ['www.myworkday.com']],
+    ['tenant.wd1.myworkdayjobs.com', 'employer.example', ['www.employer.example']],
+    ['careers.example.co.uk', 'employer.example', ['www.employer.example']],
+  ])('refuses on %s the sender %s that the page does not vouch for', async (host, sender_domain, links) => {
+    const h = await mount(host, true, 'verification-only', links)
+    expect((await h.invoke({ ...ARGS, sender_domain })).value).toEqual(MISMATCH)
+    expect(h.gmail.verificationCode).not.toHaveBeenCalled()
   })
 
   it('returns only the trusted link and rejects unrelated or sensitive link hosts', async () => {

@@ -129,6 +129,8 @@ const JOB_OWNER_PREFIX = 'job-apply:'
  * per Session closed a worker's Apply popup one second after it opened.
  */
 export const JOB_TAB_IDLE_MS = 5 * 60_000
+/** How long reading a job page's links may take before it counts as none. */
+const JOB_LINK_READ_MS = 2_000
 
 interface JobCall {
   readonly owner: string
@@ -515,17 +517,56 @@ export class HeadlessBrowserSession {
    */
   async currentJobHost(session: string, signal?: AbortSignal): Promise<string | null> {
     signal?.throwIfAborted()
+    const page = await this.#currentJobPage(session)
+    return page === null ? null : safeHost(page.url())
+  }
+
+  /**
+   * Hosts the caller's current job page links to, so an enterprise ATS page can vouch for its employer's mail domain.
+   * @param session - trusted identity of the calling Session.
+   * @param signal - cancellation of the verification request.
+   * @returns distinct http(s) link hostnames of the page's main frame, from at most 500 anchors; empty when unknown.
+   */
+  async currentJobLinkHosts(session: string, signal?: AbortSignal): Promise<string[]> {
+    signal?.throwIfAborted()
+    const page = await this.#currentJobPage(session)
+    if (page === null) return []
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<string[]>((resolve) => { timer = setTimeout(() => { resolve([]) }, JOB_LINK_READ_MS) })
+    const read = page.evaluate(() => Array.from(document.querySelectorAll('a[href]'), anchor => String((anchor as HTMLAnchorElement).href)).slice(0, 500))
+      .catch((): string[] => [])
+    try {
+      const hrefs = await Promise.race([read, late])
+      const hosts = new Set<string>()
+      for (const href of hrefs) {
+        try {
+          const url = new URL(href)
+          if (url.protocol === 'https:' || url.protocol === 'http:') hosts.add(url.hostname)
+        } catch {
+          // A page's malformed href names no host.
+        }
+      }
+      return [...hosts]
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /**
+   * The active tab is whichever Session acted last; the caller's page is its own most recently used tab.
+   * @param session - trusted identity of the calling Session.
+   * @returns that tab's live, protected, admitted page, or null.
+   */
+  async #currentJobPage(session: string): Promise<Page | null> {
     const tabs = this.#tabs
     if (tabs === undefined) return null
-    // The active tab is whichever Session acted last; the code goes to the caller's own most recently used tab.
     const owner = JOB_OWNER_PREFIX + session
     const tab = this.tabsState()
       .filter(entry => tabs.owner(entry.id) === owner)
       .sort((a, b) => (this.#jobTabUse.get(b.id) ?? 0) - (this.#jobTabUse.get(a.id) ?? 0) || Number(b.active) - Number(a.active))[0]
     if (tab === undefined) return null
     const page = await tabs.page(tab.id)
-    const url = page.url()
-    return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(url) ? null : safeHost(url)
+    return page.isClosed() || !this.#jobPages.has(page) || deniedJobUrl(page.url()) ? null : page
   }
 
   async #protectJobPage(page: Page, onRefused?: (url: string) => void): Promise<void> {

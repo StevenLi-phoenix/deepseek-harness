@@ -71,6 +71,7 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     if (req.url === '/private') { deniedRequests++; res.end('<title>synthetic private subject</title>synthetic private mail'); return }
     res.end(`<title>Unlisted employer</title><button id="popup" onclick="window.open('${privatePage}')">Open a window</button>
       <label>Search schools<input id="search" onkeydown="if(event.key==='Enter') output.textContent='Search '+this.value"></label>
+      <a href="https://www.employer.example/about">About the employer</a><a href="mailto:jobs@employer.example">Mail</a>
       <button id="safe" onclick="output.textContent='Allowed'">Review and Submit</button>
       <button id="pay" aria-label="Pay $25 application fee" onclick="output.textContent='Unexpected'">$<span id="icon">!</span></button>
       <label>Password<input id="password" type="password"></label><output id="output"></output>
@@ -102,6 +103,8 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     expect(opened.title).toBe('Unlisted employer')
     expect(await active.currentJobHost('worker')).toBe('jobs.example.test')
     expect(await active.currentJobHost('other')).toBeNull()
+    expect(await active.currentJobLinkHosts('worker')).toEqual(['www.employer.example'])
+    expect(await active.currentJobLinkHosts('other')).toEqual([])
     await expect(active.runJob('other', new ActionGuard(), async () => await active.read({}, opened.tab))).rejects.toThrow('not owned')
     warnings.length = 0
     const outcome = await job(async () => await active.click({ selector: '#popup' }, opened.tab))
